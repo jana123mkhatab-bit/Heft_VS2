@@ -22,6 +22,7 @@
 #include "dag_generator.h"
 #include "AlgorithmResult.h"
 #include "dp.h"
+#include "Edp.h"
 
 // ============================================================
 //  UTILITY – section banner
@@ -58,7 +59,7 @@ int main()
     // -------------------------------------------------------
     // Step 1 – Generate the DAG
     // -------------------------------------------------------
-    printBanner("STEP 1 – Generating Random DAG");
+    printBanner("STEP 1  Generating Random DAG");
     DAGData dag = generateDAG(numTasks, numVMs);
     std::cout << "  DAG generated successfully.\n";
 
@@ -108,6 +109,14 @@ int main()
     printBanner("STEP 4 – HEFT + DP Scheduling");
     AlgorithmResult dpResult = dp_heft(dag);
     printAlgorithmResult(dpResult);
+
+    // ============================================================
+//  RUN EDP_HEFT (Enhanced Dynamic Programming HEFT)
+// ============================================================
+    printBanner("STEP 5 – edp_heft (Enhanced DP HEFT)");
+    AlgorithmResult edpResult = edp_heft(dag);
+    printAlgorithmResult(edpResult);
+
 
     return ok ? 0 : 1;
 }
