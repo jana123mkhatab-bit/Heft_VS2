@@ -23,6 +23,7 @@
 #include "AlgorithmResult.h"
 #include "dp.h"
 #include "Edp.h"
+#include "dac.h"
 
 // ============================================================
 //  UTILITY – section banner
@@ -116,6 +117,12 @@ int main()
     printBanner("STEP 5 – edp_heft (Enhanced DP HEFT)");
     AlgorithmResult edpResult = edp_heft(dag);
     printAlgorithmResult(edpResult);
+
+    // Step 6 – Run Divide & Conquer scheduling
+    // -------------------------------------------------------
+    printBanner("STEP 6 – Divide & Conquer Scheduling");
+    AlgorithmResult dacResult = dac_schedule(dag);
+    printAlgorithmResult(dacResult);
 
 
     return ok ? 0 : 1;

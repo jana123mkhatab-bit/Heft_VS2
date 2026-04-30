@@ -39,8 +39,10 @@
  */
 static std::mt19937 makeRandomEngine()
 {
-    std::random_device rd;
-    return std::mt19937(rd());
+    // Fixed seed → same DAG every run (reproducible results).
+    // Change the number below to get a different-but-consistent DAG.
+    constexpr unsigned int FIXED_SEED = 42u;
+    return std::mt19937(FIXED_SEED);
 }
 
 /**
