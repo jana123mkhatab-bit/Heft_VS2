@@ -20,6 +20,8 @@
 #include <string>
 
 #include "dag_generator.h"
+#include "AlgorithmResult.h"
+#include "dp.h"
 
 // ============================================================
 //  UTILITY – section banner
@@ -99,6 +101,13 @@ int main()
     std::cout << "  Entry nodes  : " << entryNodes        << "\n";
     std::cout << "  Exit  nodes  : " << exitNodes         << "\n";
     std::cout << "\n";
+
+    // -------------------------------------------------------
+    // Step 4 – Run HEFT + DP scheduling
+    // -------------------------------------------------------
+    printBanner("STEP 4 – HEFT + DP Scheduling");
+    AlgorithmResult dpResult = dp_heft(dag);
+    printAlgorithmResult(dpResult);
 
     return ok ? 0 : 1;
 }
