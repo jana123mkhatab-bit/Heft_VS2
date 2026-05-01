@@ -60,7 +60,7 @@ static void generateVMs(std::vector<VM>& vms, int numVMs, std::mt19937& gen)
 
     for (int v = 0; v < numVMs; ++v) {
         VM vm;
-        vm.id          = v;
+        vm.id= v;
         vm.speedFactor = speedDist(gen);
         vms.push_back(vm);
     }

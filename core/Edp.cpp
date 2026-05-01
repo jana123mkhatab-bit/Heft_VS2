@@ -43,9 +43,7 @@ static double edp_avgExec(const DAGData& dag, int taskId)
     return sum / static_cast<double>(et.size());
 }
 
-static double edp_commCost(const DAGData& dag,
-                            int predTask, int predVm,
-                            int /*succTask*/, int succVm)
+static double edp_commCost(const DAGData& dag,int predTask, int predVm,int /*succTask*/, int succVm)
 {
     if (predVm == succVm) return 0.0;
     constexpr double COMM_FACTOR = 0.3;
@@ -216,8 +214,13 @@ AlgorithmResult edp_heft(const DAGData& dag)
 
     vector<int> priority(n);
     iota(priority.begin(), priority.end(), 0);
-    sort(priority.begin(), priority.end(),
-         [&](int a, int b) { return biRank[a] > biRank[b]; });
+   sort(priority.begin(), priority.end(), [&](int a, int b) {
+    if (biRank[a] != biRank[b]) return biRank[a] > biRank[b];
+    // Tie-break: if a is a predecessor of b, a comes first
+    for (int succ : dag.tasks[a].successors)
+        if (succ == b) return true;
+    return a < b;   // stable fallback
+});
 
     // Phase 2: DP VM assignment
     vector<int> assignment = edp_runDP(dag, priority);
