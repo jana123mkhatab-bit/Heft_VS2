@@ -36,11 +36,4 @@
  */
 AlgorithmResult dp_heft(const DAGData& dag);
 
-/**
- * printAlgorithmResult
- * --------------------
- * Prints a formatted schedule table, makespan, and runtime to stdout.
- *
- * @param result  The AlgorithmResult produced by any scheduling algorithm.
- */
-void printAlgorithmResult(const AlgorithmResult& result);
+

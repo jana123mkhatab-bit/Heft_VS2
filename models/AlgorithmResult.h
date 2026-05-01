@@ -44,3 +44,14 @@ struct AlgorithmResult {
     double runtimeMs  = 0.0;               ///< Wall-clock time to compute schedule (ms).
     bool   isValid    = false;             ///< True if schedule passed sanity checks.
 };
+
+/**
+ * printAlgorithmResult
+ * --------------------
+ * Prints a formatted schedule table, makespan, and runtime to stdout.
+ *
+ * @param result  The AlgorithmResult produced by any scheduling algorithm.
+ */
+
+
+void printAlgorithmResult(const AlgorithmResult& result);
