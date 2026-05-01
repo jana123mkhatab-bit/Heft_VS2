@@ -4,7 +4,7 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDe
 
 echo.
 echo Compiling the project...
-cl /EHsc /W3 /I. /Imodels /Icore /Iutils main.cpp core\dac.cpp core\dp.cpp core\Edp.cpp core\heft.cpp utils\dag_generator.cpp utils\metrics.cpp /Fe:HeftProject.exe
+cl /EHsc /W3 /I. /Imodels /Icore /Iutils main.cpp core\dac.cpp core\dp.cpp core\Edp.cpp core\heft.cpp utils\dag_generator.cpp /Fe:HeftProject.exe
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
