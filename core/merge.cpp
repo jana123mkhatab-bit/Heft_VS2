@@ -706,12 +706,12 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     }
     
     // Approach 2: Global EDP on all tasks (more aggressive)
-    vector<int> allTasks(n);
-    iota(allTasks.begin(), allTasks.end(), 0);
-    sort(allTasks.begin(), allTasks.end(), [&](int a, int b) {
-        return biRank[a] > biRank[b];
-    });
-    scheduleLevel_EDP(dag, allTasks, biRank, stGlobal);
+    // vector<int> allTasks(n);
+    // iota(allTasks.begin(), allTasks.end(), 0);
+    // sort(allTasks.begin(), allTasks.end(), [&](int a, int b) {
+    //     return biRank[a] > biRank[b];
+    // });
+    // scheduleLevel_EDP(dag, allTasks, biRank, stGlobal);
 
     // Choose the better initial schedule
     double makespanAdaptive = computeMakespan(stAdaptive, n);
