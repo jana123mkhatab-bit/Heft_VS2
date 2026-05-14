@@ -8,6 +8,22 @@
 
 using namespace std;
 
+static double dac_commCost(const DAGData& dag,
+                           int predTask,
+                           int predVm,
+                           int /*succTask*/,
+                           int succVm)
+{
+    if (predVm == succVm) return 0.0;
+
+    const auto& et = dag.tasks[predTask].execTimes;
+    double avg = accumulate(et.begin(), et.end(), 0.0);
+    avg /= static_cast<double>(et.size());
+
+    constexpr double COMM_FACTOR = 0.3;
+    return COMM_FACTOR * avg;
+}
+
 AlgorithmResult dac_schedule(const DAGData& dag) {
 
     auto startTimeMs = std::chrono::high_resolution_clock::now();
@@ -131,7 +147,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
                 double commCost = 0.0;
 
                 if (taskVM[pred] != v) {
-                    commCost = dag.commCost[pred][u]; // 🔥 KEY FIX
+                    commCost = dac_commCost(dag, pred, taskVM[pred], u, v);
                 }
 
                 readyTime = max(readyTime,
