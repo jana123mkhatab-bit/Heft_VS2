@@ -21,6 +21,7 @@
 
 #include "dag_generator.h"
 #include "AlgorithmResult.h"
+#include "heft.h"
 #include "dp.h"
 #include "Edp.h"
 #include "dac.h"
@@ -105,22 +106,29 @@ int main()
     std::cout << "\n";
 
     // -------------------------------------------------------
-    // Step 4 – Run HEFT + DP scheduling
+    // Step 4 – Run greedy HEFT scheduling
     // -------------------------------------------------------
-    printBanner("STEP 4 – HEFT + DP Scheduling");
+    printBanner("STEP 4 – HEFT Scheduling (Greedy)");
+    AlgorithmResult heftResult = heft_schedule(dag);
+    printAlgorithmResult(heftResult);
+
+    // -------------------------------------------------------
+    // Step 5 – Run HEFT + DP scheduling
+    // -------------------------------------------------------
+    printBanner("STEP 5 – HEFT + DP Scheduling");
     AlgorithmResult dpResult = dp_heft(dag);
     printAlgorithmResult(dpResult);
 
     // ============================================================
 //  RUN EDP_HEFT (Enhanced Dynamic Programming HEFT)
 // ============================================================
-    printBanner("STEP 5 – edp_heft (Enhanced DP HEFT)");
+    printBanner("STEP 6 – edp_heft (Enhanced DP HEFT)");
     AlgorithmResult edpResult = edp_heft(dag);
     printAlgorithmResult(edpResult);
 
-    // Step 6 – Run Divide & Conquer scheduling
+    // Step 7 – Run Divide & Conquer scheduling
     // -------------------------------------------------------
-    printBanner("STEP 6 – Divide & Conquer Scheduling");
+    printBanner("STEP 7 – Divide & Conquer Scheduling");
     AlgorithmResult dacResult = dac_schedule(dag);
     printAlgorithmResult(dacResult);
 
