@@ -1,0 +1,636 @@
+% ============================================================
+%  IEEE Conference Paper — DAG Task Scheduling on Heterogeneous
+%  Cloud Resources: DP-HEFT, EDP-HEFT, and Divide & Conquer
+%  Class:    IEEEtran (conference)
+%  Compiler: pdflatex (two passes)
+%  Overleaf: Upload main.tex + references.bib, then compile
+% ============================================================
+\documentclass[conference]{IEEEtran}
+
+% ---- Packages ----
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{balance}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds}
+\usepackage[pdftex,
+            pdftitle={Hybrid DP and Divide-and-Conquer DAG Scheduling},
+            pdfkeywords={cloud computing, DAG scheduling, HEFT, dynamic programming}]{hyperref}
+
+% ---- Macros ----
+\newcommand{\BibTeX}{\textsc{Bib}\TeX}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\EST}{\mathrm{EST}}
+\newcommand{\EFT}{\mathrm{EFT}}
+\newcommand{\ranku}{\mathrm{rank}_u}
+\newcommand{\rankd}{\mathrm{rank}_d}
+
+% ============================================================
+\begin{document}
+
+% ---- Title ----
+\title{Hybrid Dynamic Programming and Divide-and-Conquer Strategies\\
+      for DAG Task Scheduling on Heterogeneous Cloud Resources:\\
+      A Comparative C++ Study}
+
+\author{
+\IEEEauthorblockN{
+Jana Mohamed Farouk \hspace{3cm}
+Ahmed Mahmoud Ahmed
+}
+\IEEEauthorblockA{
+\textit{Department of Computer Science} \hspace{2.3cm}
+\textit{Department of Computer Science}\\
+Misr International University (MIU), Cairo, Egypt \hspace{0.8cm}
+Misr International University (MIU), Cairo, Egypt\\
+jana2402038@miuegypt.edu.eg \hspace{2.5cm}
+ahmed2402226@miuegypt.edu.eg
+}
+
+\vspace{0.5cm}
+
+\IEEEauthorblockN{
+Fatma Ashraf Hassan \hspace{3cm}
+Shaza Ali Farouk
+}
+\IEEEauthorblockA{
+\textit{Department of Computer Science} \hspace{2.3cm}
+\textit{Department of Computer Science}\\
+Misr International University (MIU), Cairo, Egypt \hspace{0.8cm}
+Misr International University (MIU), Cairo, Egypt\\
+fatma2403025@miuegypt.edu.eg \hspace{2.2cm}
+shaza2408891@miuegypt.edu.eg
+}
+
+\vspace{0.5cm}
+
+\IEEEauthorblockN{Mahmoud Mohamed Emam}
+\IEEEauthorblockA{
+\textit{Department of Computer Science}\\
+Misr International University (MIU), Cairo, Egypt\\
+mahmoud2408910@miuegypt.edu.eg
+}
+}
+
+\maketitle
+
+% ============================================================
+%  ABSTRACT
+% ============================================================
+\begin{abstract}
+Scheduling computational workflows represented as Directed Acyclic
+Graphs (DAGs) onto heterogeneous Virtual Machines (VMs) is a
+fundamental NP-hard problem in cloud computing. This paper presents
+and compares five scheduling algorithms implemented in pure C++17 in
+the following order: (1) \emph{HEFT} as the classical baseline,
+(2) \emph{DP-HEFT} with bilateral-rank and 2-task look-ahead,
+(3) \emph{Enhanced DP (EDP-HEFT)} with global DP assignment,
+(4) \emph{Divide-and-Conquer} (D\&C) with level decomposition, and
+(5) \emph{Merge}, a hybrid scheduler that combines adaptive strategy
+selection with refinement. All algorithms share a unified
+communication-cost model and a reproducible DAG generator. Comparative
+analysis highlights the complexity-quality trade-off between fast
+greedy scheduling and more expensive global/refined optimisation.
+\end{abstract}
+
+\begin{IEEEkeywords}
+DAG scheduling, cloud computing, HEFT, dynamic programming,
+divide and conquer, heterogeneous computing, makespan minimisation,
+bilateral rank, C++, workflow scheduling
+\end{IEEEkeywords}
+
+% ============================================================
+%  I. INTRODUCTION
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+
+Cloud computing platforms increasingly execute scientific and
+enterprise workflows as Directed Acyclic Graphs (DAGs), where each
+node is a computational task and each directed edge encodes a data
+dependency~\cite{deelman2009workflows,buyya2009cloud}. The
+scheduling problem — assigning tasks to heterogeneous Virtual
+Machines (VMs) while minimising total completion time (makespan) —
+is NP-hard in the
+general case~\cite{ullman1975np,garey1979computers}, motivating
+a rich body of heuristic research.
+
+The seminal Heterogeneous Earliest Finish Time (HEFT)
+algorithm~\cite{topcuoglu2002heft} achieves near-optimal makespan
+through upward-rank prioritisation combined with an Earliest Finish
+Time (EFT) insertion policy. While HEFT is efficient and well-studied,
+its greedy VM selection ignores downstream tasks, occasionally
+leaving critical successors stranded on slow resources. Extending
+HEFT with dynamic programming look-ahead is therefore a natural
+direction for improving solution quality.
+
+This paper makes the following contributions:
+\begin{enumerate}
+      \item \textbf{HEFT Baseline}: A faithful greedy HEFT implementation
+                        used as the classical reference for makespan and complexity
+                        comparison in the same C++17 environment.
+  \item \textbf{DP-HEFT}: A HEFT extension that uses bilateral rank
+        (upward rank + downward rank) for task prioritisation and a
+        weighted 2-task look-ahead DP for VM assignment, scoring each
+        candidate as $\EFT(t_i) + 0.25 \cdot \EFT^*(t_{i+1})$.
+  \item \textbf{EDP-HEFT}: An enhanced variant that constructs a full
+        $n \times m$ DP table over the bilateral-rank priority order,
+        propagating scheduling snapshots to achieve globally optimal
+        VM assignments within that order, and backtracking to recover
+        the optimal sequence.
+  \item \textbf{D\&C Scheduler}: A divide-and-conquer approach that
+        decomposes the DAG into independent topological levels via BFS,
+        schedules each level as a sub-problem, and merges partial
+        schedules with cross-level dependency and communication cost
+        awareness.
+  \item \textbf{Merge Scheduler}: A hybrid merge strategy that
+        adaptively switches among D\&C, DP look-ahead, and EDP-style
+        global assignment, followed by refinement passes to reduce
+        bottlenecks and improve final makespan.
+  \item A shared C++17 implementation including a probabilistic DAG
+        generator with reproducible fixed seeding, an exhaustive
+        8-check validator, and a unified output model enabling
+        direct metric comparison.
+\end{enumerate}
+
+The remainder of the paper is organised as follows.
+Section~\ref{sec:related} surveys related work.
+Section~\ref{sec:problem} formalises the scheduling problem.
+Section~\ref{sec:arch} describes the system architecture.
+Section~\ref{sec:algorithms} presents each algorithm with pseudocode.
+Section~\ref{sec:math} details the mathematical model.
+Section~\ref{sec:complexity} analyses computational complexity.
+Section~\ref{sec:impl} discusses C++ implementation.
+Section~\ref{sec:setup} describes the experimental setup.
+Section~\ref{sec:results} presents performance results.
+Section~\ref{sec:discussion} discusses findings.
+Section~\ref{sec:future} outlines future work.
+Section~\ref{sec:conclusion} concludes.
+
+% ============================================================
+%  II. RELATED WORK
+% ============================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{List Scheduling and HEFT}
+
+Kwok and Ahmad~\cite{kwok1999static} provided a comprehensive
+taxonomy of static DAG scheduling algorithms, establishing upward
+rank as the dominant prioritisation criterion. Topcuoglu
+\textit{et al.}~\cite{topcuoglu2002heft} introduced HEFT and CPOP,
+demonstrating that upward-rank sorting with EFT insertion consistently
+achieves lower makespan than random or FIFO ordering on heterogeneous
+systems. Arabnejad and Barbosa~\cite{arabnejad2014cpop} extended this
+work with an Optimistic Cost Table (OCT) that approximates future
+communication costs, improving makespan by up to 12\% on standard
+benchmarks. Hagras and Jane\v{c}ek~\cite{hagras2003static} proposed
+HBMCT, which combines task duplication with heterogeneity-aware
+priority.
+
+\subsection{Look-Ahead and DP Extensions}
+
+Bittencourt \textit{et al.}~\cite{bittencourt2018heft} introduced
+HEFT-NC (No Communication), demonstrating that look-ahead awareness
+of immediate successors yields measurable makespan reductions.
+Sakellariou and Zhao~\cite{sakellariou2004hybrid} proposed a hybrid
+scheduler combining list scheduling with task duplication, exploiting
+idle processor windows. Bajaj and Agrawal~\cite{bajaj2004improving}
+formalised the bilateral rank ($\ranku + \rankd$) and showed it
+captures both path-criticality and positional importance, outperforming
+pure upward-rank ordering.
+
+\subsection{Divide-and-Conquer Scheduling}
+
+Dong \textit{et al.}~\cite{dong2007divide} applied level-based
+decomposition to Grid scheduling, independently optimising intra-level
+task placement. Canon \textit{et al.}~\cite{canon2008comparative}
+benchmarked decomposition heuristics against list schedulers on
+standard DAG suites, finding that level-based methods perform
+competitively on shallow graphs but degrade on deep critical paths.
+
+\subsection{Cloud Workflow Scheduling}
+
+Pandey \textit{et al.}~\cite{pandey2010particle} adapted Particle
+Swarm Optimisation for cloud workflow scheduling, reporting cost
+reductions over greedy baselines. Ma \textit{et al.}~\cite{ma2023survey}
+provide a recent survey of DAG scheduling in cloud computing,
+identifying bilateral-rank heuristics and DP-based methods as among
+the most effective approaches for minimising makespan on heterogeneous
+resources.
+
+\subsection{Positioning}
+
+Unlike prior studies, this work: (i) provides three scheduling
+strategies — incremental 2-task DP, full-table global DP, and
+level-based D\&C — within a single C++17 harness sharing identical
+data models; (ii) employs bilateral rank with predecessor-aware
+tie-breaking; and (iii) makes all source code available for
+reproducible benchmarking.
+
+% ============================================================
+%  III. PROBLEM FORMULATION
+% ============================================================
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{DAG Workflow Model}
+
+A workflow application is modelled as a DAG
+$G = (\mathcal{T}, \mathcal{E})$, where:
+\begin{itemize}
+  \item $\mathcal{T} = \{t_0, t_1, \ldots, t_{N-1}\}$ is the set of
+        $N$ computational tasks.
+  \item $\mathcal{E} \subseteq \mathcal{T} \times \mathcal{T}$ is the
+        set of directed dependency edges. An edge $(t_i, t_j) \in
+        \mathcal{E}$ (with $i < j$) signifies that $t_j$ may not begin
+        until $t_i$ has completed and transmitted its output data.
+\end{itemize}
+
+The acyclicity condition is enforced structurally: edges are created
+only from $t_i$ to $t_j$ with $i < j$, so the integer index is
+itself a valid topological order.
+
+\subsection{Heterogeneous Resource Model}
+
+A cloud data centre is modelled by $M$ heterogeneous VMs
+$\mathcal{V} = \{v_0, v_1, \ldots, v_{M-1}\}$. Each VM $v_k$ has a
+speed factor $s_k \in [s_{\min}, s_{\max}]$ drawn uniformly at
+random. The execution time of task $t_i$ on VM $v_k$ is given as
+$w_{ik} \in [w_{\min}, w_{\max}]$, generated independently per
+task-VM pair to model genuine heterogeneity.
+
+\subsection{Communication Cost Model}
+
+When task $t_i$ (assigned to VM $v_p$) produces data consumed by
+task $t_j$ (assigned to VM $v_q$), the inter-VM data transfer
+incurs a communication delay modelled as:
+\begin{equation}
+  c(t_i, v_p, t_j, v_q) =
+  \begin{cases}
+    0 & \text{if } p = q,\\
+    \alpha \cdot \bar{w}_i & \text{otherwise,}
+  \end{cases}
+  \label{eq:comm}
+\end{equation}
+where $\bar{w}_i = \frac{1}{M}\sum_{k=0}^{M-1} w_{ik}$ is the
+average execution time of task $t_i$ across all VMs, and
+$\alpha = 0.3$ is the communication factor (implemented identically
+in \texttt{dp.cpp}, \texttt{Edp.cpp}, and \texttt{dac.cpp}).
+
+\subsection{Scheduling Objective}
+
+A schedule $\sigma : \mathcal{T} \to \mathcal{V}$ assigns each task
+to exactly one VM. The performance metric is the \emph{makespan}:
+\begin{equation}
+  C_{\max}(\sigma) = \max_{t_i \in \mathcal{T}}\; \EFT(t_i, \sigma(t_i)),
+  \label{eq:makespan}
+\end{equation}
+where $\EFT(t_i, v_k)$ denotes the Earliest Finish Time of task
+$t_i$ on VM $v_k$ under schedule $\sigma$. The scheduling problem
+is:
+\begin{equation}
+  \sigma^* = \argmin_{\sigma}\; C_{\max}(\sigma).
+  \label{eq:opt}
+\end{equation}
+
+Each task must be assigned to exactly one VM, and a task may not
+start until all predecessor finish times (plus applicable
+communication costs) have elapsed and the assigned VM is free.
+
+% ============================================================
+%  IV. SYSTEM ARCHITECTURE
+% ============================================================
+\section{System Architecture}
+\label{sec:arch}
+
+\subsection{Module Overview}
+
+The framework is structured into three layers as shown in
+Fig.~\ref{fig:arch}:
+
+\begin{figure}[!t]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners=3pt, fill=#1!18,
+              minimum width=6.8cm, minimum height=0.72cm,
+              font=\small\bfseries, align=center},
+  arr/.style={-Stealth, thick, gray}
+]
+      \node[box=cyan]   (eval) at (0, 0)    {Algorithm Layer (heft.cpp / dp.cpp / Edp.cpp / dac.cpp / merge.cpp)};
+  \node[box=green]  (mod)  at (0,-1.1)  {Model Layer (dag\_generator.h / AlgorithmResult.h)};
+  \node[box=orange] (gen)  at (0,-2.2)  {Generator \& Validator Layer (dag\_generator.cpp)};
+  \node[box=violet] (main) at (0,-3.3)  {Entry Point (main.cpp)};
+  \draw[arr] (main.north) -- (gen.south);
+  \draw[arr] (gen.north)  -- (mod.south);
+  \draw[arr] (mod.north)  -- (eval.south);
+\end{tikzpicture}
+\caption{Three-layer architecture of the DAG scheduling framework.}
+\label{fig:arch}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Generator \& Validator Layer} (\texttt{dag\_generator.cpp}):
+        Constructs random DAGs using a Mersenne Twister PRNG seeded
+        with fixed value 42 for reproducibility. Enforces eight
+        structural invariants.
+  \item \textbf{Model Layer} (\texttt{dag\_generator.h},
+        \texttt{AlgorithmResult.h}): Defines the shared data
+        structures \texttt{Task}, \texttt{VM}, \texttt{DAGData},
+        \texttt{ScheduleEntry}, and \texttt{AlgorithmResult} used
+        uniformly across all components.
+  \item \textbf{Algorithm Layer} (\texttt{dp.cpp}, \texttt{Edp.cpp},
+        \texttt{dac.cpp}, \texttt{heft.cpp}, \texttt{merge.cpp}): Each algorithm exposes a single function
+        returning an \texttt{AlgorithmResult} printable by the shared
+        \texttt{printAlgorithmResult()} routine.
+\end{enumerate}
+
+\subsection{Data Structures}
+
+The core data types, defined in \texttt{dag\_generator.h} and
+\texttt{AlgorithmResult.h}, are:
+
+\begin{itemize}
+  \item \texttt{Task}: holds task id, predecessor list, successor
+        list, and a per-VM execution time vector
+        (\texttt{std::vector<double>\ execTimes}).
+  \item \texttt{VM}: holds VM id and a floating-point speed factor.
+  \item \texttt{DAGData}: aggregates all tasks and VMs into a single
+        container passed by constant reference throughout the pipeline.
+  \item \texttt{ScheduleEntry}: records task id, assigned VM id,
+        start time (\texttt{startTime}), and finish time
+        (\texttt{finishTime}) for a single task.
+  \item \texttt{AlgorithmResult}: wraps a vector of
+        \texttt{ScheduleEntry} objects, the overall makespan, the
+        wall-clock runtime in milliseconds, and a validity flag.
+\end{itemize}
+
+\subsection{Execution Flow}
+
+\texttt{main.cpp} executes the following pipeline:
+\begin{enumerate}
+  \item Generate a DAG with \texttt{DEFAULT\_NUM\_TASKS = 10} tasks
+        and \texttt{DEFAULT\_NUM\_VMS = 5} VMs.
+  \item Print the full DAG structure (VM speed factors, per-task
+        adjacency lists, per-VM execution times).
+  \item Validate the DAG against eight structural checks.
+      \item Invoke \texttt{heft\_schedule()}, print result.
+      \item Invoke \texttt{dp\_heft()}, print result.
+      \item Invoke \texttt{edp\_heft()}, print result.
+      \item Invoke \texttt{dac\_schedule()}, print result.
+      \item Invoke \texttt{merge\_schedule()}, print result.
+\end{enumerate}
+
+\subsection{DAG Generation}
+
+The \texttt{generateDAG()} function builds the DAG in three stages:
+(1) VMs are created with speed factors drawn from
+$\mathcal{U}(0.5,\,2.0)$; (2) tasks are created with execution times
+drawn from $\mathcal{U}(1.0,\,20.0)$ per VM; (3) for every ordered
+pair $(i,j)$ with $i < j$, edge $t_i \to t_j$ is added with
+probability $p_e = 0.35$. Acyclicity is guaranteed by construction
+since $j > i$ always holds. At least one edge is guaranteed by
+inserting $t_0 \to t_{N-1}$ if the probabilistic process yields an
+empty graph.
+
+\subsection{DAG Validation}
+
+Eight structural checks are applied:
+(A)~\texttt{execTimes.size()} $== M$ for every task;
+(B)~no self-loops;
+(C)~all predecessor/successor indices within $[0,N)$;
+(D)~bidirectional consistency (if $A$ lists $B$ as successor,
+$B$ must list $A$ as predecessor);
+(E)~acyclic ordering ($j > i$ for every edge $t_i \to t_j$);
+(F)~at least one entry node (no predecessors);
+(G)~at least one exit node (no successors);
+(H)~no duplicate edges in either list.
+
+% ============================================================
+%  V. SCHEDULING ALGORITHMS
+% ============================================================
+\section{Scheduling Algorithms}
+\label{sec:algorithms}
+
+This section presents the five schedulers implemented in the framework.
+All methods share the EFT-based feasibility model in
+Section~\ref{sec:problem} and the communication model in
+Eq.~\eqref{eq:comm}.
+
+\subsection{HEFT (Baseline)}
+
+HEFT~\cite{topcuoglu2002heft} computes upward ranks, sorts tasks in
+descending $\ranku$, and greedily assigns each task to the VM yielding
+the minimum EFT. In this study, HEFT serves as the classical baseline
+for both makespan and computational overhead.
+
+\begin{algorithm}[!t]
+\caption{HEFT Scheduling (Greedy EFT)}
+\label{alg:heft}
+\begin{algorithmic}[1]
+\STATE Compute $\ranku(t)$ for all tasks $t \in \mathcal{T}$
+\STATE Sort tasks by descending $\ranku$
+\FOR{each task $t$ in sorted order}
+    \STATE For each VM $v_k$, compute $\EST(t,v_k)$ and $\EFT(t,v_k)$
+    \STATE Assign $t$ to $v^* = \argmin_{v_k} \EFT(t,v_k)$
+    \STATE Update VM availability and task finish time
+\ENDFOR
+\STATE \textbf{return} complete schedule and makespan
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{DP-HEFT}
+
+DP-HEFT extends HEFT by replacing pure upward-rank ordering with
+bilateral rank ($\ranku + \rankd$), then applying a weighted 2-task
+look-ahead when selecting the VM for the current task.
+
+\subsection{EDP-HEFT}
+
+EDP-HEFT preserves bilateral-rank priority but evaluates VM decisions
+through a global DP table over task order and VM index. Backtracking
+produces a globally consistent assignment under the chosen priority
+order.
+
+\subsection{Divide-and-Conquer (D\&C)}
+
+D\&C decomposes the DAG into topological BFS levels, schedules each
+level as an independent subproblem, and then merges local schedules
+while enforcing precedence and communication constraints globally.
+
+\subsection{Merge Algorithm (Hybrid OP)}
+
+The Merge algorithm (implemented in \texttt{merge.cpp}) is a hybrid
+strategy that integrates D\&C decomposition, DP look-ahead, and
+EDP-style global assignment in one adaptive pipeline.
+Its role is to improve schedule quality over local heuristics while
+retaining practical runtime on moderate DAG sizes.
+
+\begin{algorithm}[!t]
+\caption{Merge Hybrid Scheduling}
+\label{alg:merge}
+\begin{algorithmic}[1]
+\STATE Compute upward and downward ranks; derive bilateral rank
+\STATE Build topological levels and graph profile (width, density, criticality)
+\FOR{each level $L_i$}
+    \STATE Classify strategy for $L_i$: D\&C / DP look-ahead / EDP-global
+    \STATE Schedule tasks in $L_i$ using selected strategy
+\ENDFOR
+\STATE Build alternate global EDP assignment for all tasks
+\STATE Select better initial schedule by makespan
+\STATE Run refinement passes (migration, swaps, and critical-task re-optimisation)
+\STATE \textbf{return} best refined schedule
+\end{algorithmic}
+\end{algorithm}
+
+% ============================================================
+%  VI. MATHEMATICAL MODEL NOTE
+% ============================================================
+\section{Mathematical Model}
+\label{sec:math}
+
+The optimisation target and constraints are exactly those defined in
+Section~\ref{sec:problem}, with objective in Eq.~\eqref{eq:opt} and
+communication model in Eq.~\eqref{eq:comm}. All five algorithms differ
+only in ordering and assignment strategy; they share identical
+feasibility constraints and makespan objective.
+
+% ============================================================
+%  VII. COMPLEXITY ANALYSIS
+% ============================================================
+\section{Complexity Analysis}
+\label{sec:complexity}
+
+Let $n = |\mathcal{T}|$ denote the number of tasks,
+$m = |\mathcal{V}|$ the number of VMs, and
+$e = |\mathcal{E}|$ the number of edges.
+
+\subsection{Per-Algorithm Complexity}
+
+\begin{table}[!t]
+\caption{Time and Space Complexity of Implemented Schedulers}
+\label{tab:complexity}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Algorithm} & \textbf{Time Complexity} & \textbf{Space Complexity} \\
+\midrule
+HEFT & $O(n\log n + m e)$ & $O(n + m + e)$ \\
+DP-HEFT & $O(n\log n + n m^2 + m e)$ & $O(n + m + e)$ \\
+EDP-HEFT & $O(n m^2 + m e)$ & $O(nm(n+m))$ \\
+D\&C & $O(n\log n + n m + e)$ & $O(n + m + e)$ \\
+Merge (Hybrid) & $O(n m^2 + n m(n+e) + n^2(n+e))$ & $O(nm(n+m))$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+HEFT remains computationally efficient due to greedy assignment.
+DP-HEFT adds a bounded look-ahead term. EDP-HEFT introduces a global
+DP state space across task-VM combinations. D\&C has the lowest
+asymptotic scheduling overhead in this implementation. Merge has the
+highest asymptotic cost due to iterative refinement and replay passes,
+but this cost is used to improve final schedule quality.
+
+\subsection{Comparative Analysis}
+
+Based on Table~\ref{tab:complexity} and the default deterministic run
+($n=10$, $m=5$, fixed seed 42), the following observations hold:
+\begin{itemize}
+  \item \textbf{Highest time complexity:} Merge (Hybrid), due to multi-pass
+        refinement over full schedule replays.
+  \item \textbf{Lowest time complexity:} D\&C, dominated by level sorting and
+        linear merge constraints.
+  \item \textbf{Highest space complexity:} EDP-HEFT and Merge, both requiring
+        DP/snapshot state that scales with task-VM combinations.
+  \item \textbf{Fastest execution in practice:} D\&C (lowest runtime overhead
+        in the provided implementation).
+  \item \textbf{Best (lowest) makespan:} EDP-HEFT and Merge tie at the best
+        observed makespan in the default experiment.
+  \item \textbf{Trade-off:} lower-overhead methods (HEFT, D\&C) run faster but
+        may yield larger makespan; global/refined methods (EDP-HEFT, Merge)
+        consume more compute and memory but improve scheduling quality.
+\end{itemize}
+
+% ============================================================
+%  VIII. IMPLEMENTATION DETAILS
+% ============================================================
+\section{Implementation Details}
+\label{sec:impl}
+
+The implementation is pure C++17 and uses shared data structures across
+all schedulers. Communication-cost and EFT computations are harmonised to
+ensure fair comparison between algorithms.
+
+% ============================================================
+%  IX. EXPERIMENTAL SETUP
+% ============================================================
+\section{Experimental Setup}
+\label{sec:setup}
+
+Experiments use the default configuration in \texttt{main.cpp}:
+$n=10$ tasks, $m=5$ heterogeneous VMs, edge probability $p_e=0.35$,
+and fixed RNG seed 42 for reproducibility.
+
+% ============================================================
+%  X. RESULTS
+% ============================================================
+\section{Results}
+\label{sec:results}
+
+For the default deterministic DAG instance, the observed makespan
+ordering is:
+\[
+\text{D\&C} > \text{HEFT} > \text{DP-HEFT} > \text{EDP-HEFT} \approx \text{Merge}.
+\]
+This confirms that DP-enhanced and hybrid methods improve schedule
+quality over purely greedy or purely level-based baselines.
+
+% ============================================================
+%  XI. DISCUSSION
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+
+The empirical and complexity findings indicate that algorithm choice
+depends on deployment goals: low overhead for rapid scheduling decisions
+or stronger optimisation for lower makespan in performance-critical
+workflow execution.
+
+% ============================================================
+%  XII. FUTURE WORK
+% ============================================================
+\section{Future Work}
+\label{sec:future}
+
+Future work includes evaluating larger DAG benchmarks, varying
+communication models, and introducing energy/cost-aware multi-objective
+extensions.
+
+% ============================================================
+%  XIII. CONCLUSION
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+This work presents a unified C++17 benchmark for HEFT, DP-HEFT,
+EDP-HEFT, D\&C, and Merge scheduling under identical assumptions.
+The added HEFT and Merge analyses complete the methodology coverage and
+highlight clear complexity-quality trade-offs for heterogeneous cloud
+workflow scheduling.
+
+\balance
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
