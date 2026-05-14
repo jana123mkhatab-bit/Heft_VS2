@@ -25,6 +25,7 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -168,6 +169,8 @@ static vector<double> computeDownwardRank(const DAGData& dag)
 
 AlgorithmResult dp_heft(const DAGData& dag)
 {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
@@ -236,6 +239,9 @@ AlgorithmResult dp_heft(const DAGData& dag)
     }
 
     // ── Step 4: Build result ─────────────────────────────────────────────────
+    auto endTime = std::chrono::high_resolution_clock::now();
+    double runtimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+
     AlgorithmResult result;
     result.algorithmName = "HEFT + DP";
     result.algorithmDesc = "Bilateral rank with 2-task look-ahead";
@@ -243,6 +249,7 @@ AlgorithmResult dp_heft(const DAGData& dag)
         result.entries.push_back(kv.second);
 
     result.makespan = *std::max_element(vmReady.begin(), vmReady.end());
+    result.runtimeMs = runtimeMs;
     return result;
 }
 

@@ -31,10 +31,10 @@
 // ============================================================
 
 /// Default number of tasks in the generated DAG.
-constexpr int DEFAULT_NUM_TASKS = 10;
+constexpr int DEFAULT_NUM_TASKS = 40;
 
 /// Default number of Virtual Machines.
-constexpr int DEFAULT_NUM_VMS = 5;
+constexpr int DEFAULT_NUM_VMS = 7;
 
 /// Probability [0,1] that an edge (i→j) exists (i < j).
 constexpr double EDGE_PROBABILITY = 0.35;

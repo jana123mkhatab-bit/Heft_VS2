@@ -18,6 +18,9 @@
 
 #include <iostream>
 #include <string>
+#include <iomanip>
+#include <algorithm>
+#include <vector>
 
 #include "models/dag_generator.h"
 #include "models/AlgorithmResult.h"
@@ -26,6 +29,7 @@
 #include "core/Edp.h"
 #include "core/dac.h"
 #include "core/merge.h"
+using namespace std;
 
 // ============================================================
 //  UTILITY – section banner
@@ -46,15 +50,35 @@ static void printBanner(const std::string& title)
 int main()
 {
     // -------------------------------------------------------
-    // Configuration – change these to scale the experiment
-    // -------------------------------------------------------
-    const int numTasks = DEFAULT_NUM_TASKS;  // defined in dag_generator.h
-    const int numVMs   = DEFAULT_NUM_VMS;
-
-    // -------------------------------------------------------
     // Header
     // -------------------------------------------------------
     printBanner("DAG TASK SCHEDULING GENERATOR  |  Pure C++  |  No Qt");
+
+    // -------------------------------------------------------
+    // User Input – Number of Tasks and VMs
+    // -------------------------------------------------------
+    int numTasks = DEFAULT_NUM_TASKS;
+    int numVMs   = DEFAULT_NUM_VMS;
+
+    std::cout << "\n  Enter number of tasks (default " << DEFAULT_NUM_TASKS << "): ";
+    std::string taskInput;
+    std::getline(std::cin, taskInput);
+    if (!taskInput.empty()) {
+        numTasks = std::stoi(taskInput);
+    }
+
+    std::cout << "  Enter number of virtual machines (default " << DEFAULT_NUM_VMS << "): ";
+    std::string vmInput;
+    std::getline(std::cin, vmInput);
+    if (!vmInput.empty()) {
+        numVMs = std::stoi(vmInput);
+    }
+
+    // Validate input
+    if (numTasks <= 0) numTasks = DEFAULT_NUM_TASKS;
+    if (numVMs <= 0) numVMs = DEFAULT_NUM_VMS;
+
+    printBanner("CONFIGURATION");
     std::cout << "  Tasks : " << numTasks << "\n";
     std::cout << "  VMs   : " << numVMs   << "\n";
     std::cout << "  Edge probability : " << EDGE_PROBABILITY << "\n";
@@ -109,7 +133,7 @@ int main()
     // -------------------------------------------------------
     // Step 4 – Run greedy HEFT scheduling
     // -------------------------------------------------------
-    printBanner("STEP 4 – HEFT Scheduling (Greedy)");
+  printBanner("STEP 4 HEFT Scheduling (Greedy)");
     AlgorithmResult heftResult = heft_schedule(dag);
     printAlgorithmResult(heftResult);
 
@@ -141,7 +165,70 @@ int main()
     AlgorithmResult opResult = merge_schedule(dag);
     printAlgorithmResult(opResult);
 
+    // ============================================================
+    // COMPARISON TABLE – All Algorithms Makespan & Runtime
+    // ============================================================
+    printBanner("ALGORITHM COMPARISON – PERFORMANCE RESULTS");
 
+    const std::string tableBorder(100, '=');
+    const std::string rowSeparator(100, '-');
+
+    std::cout << tableBorder << "\n";
+    std::cout << "  " << std::left << std::setw(35) << "Algorithm"
+              << std::right << std::setw(20) << "Makespan"
+              << std::right << std::setw(20) << "Runtime (ms)"
+              << "  " << "\n";
+    std::cout << rowSeparator << "\n";
+
+    // Create algorithm results vector with makespan and runtime
+    struct AlgoResult {
+        std::string name;
+        double makespan;
+        double runtime;
+    };
+
+    std::vector<AlgoResult> results = {
+        {"HEFT (Greedy)", heftResult.makespan, heftResult.runtimeMs},
+        {"HEFT + DP (2-Task Look-Ahead)", dpResult.makespan, dpResult.runtimeMs},
+        {"EDP HEFT (Enhanced DP)", edpResult.makespan, edpResult.runtimeMs},
+        {"Divide & Conquer (Level-based)", dacResult.makespan, dacResult.runtimeMs},
+        {"Merge Algorithm", opResult.makespan, opResult.runtimeMs}
+    };
+
+    // Sort by makespan (best to worst)
+    std::sort(results.begin(), results.end(),
+              [](const auto& a, const auto& b) {
+                  return a.makespan < b.makespan;
+              });
+
+    std::cout << std::fixed << std::setprecision(2);
+
+    for (size_t i = 0; i < results.size(); ++i) {
+        std::string rank = (i == 0) ? " ✓ BEST" : "";
+        std::cout << "  " << std::left << std::setw(35) << results[i].name
+                  << std::right << std::setw(20) << results[i].makespan
+                  << std::right << std::setw(20) << results[i].runtime
+                  << rank << "\n";
+    }
+
+    std::cout << rowSeparator << "\n";
+
+    // Calculate improvement and find fastest algorithm
+    double bestMakespan = results[0].makespan;
+    double worstMakespan = results[results.size() - 1].makespan;
+    double improvement = ((worstMakespan - bestMakespan) / worstMakespan) * 100.0;
+
+    // Find fastest runtime
+    double fastestRuntime = results[0].runtime;
+    for (const auto& r : results) {
+        fastestRuntime = std::min(fastestRuntime, r.runtime);
+    }
+
+    std::cout << "\n  Best makespan:           " << std::fixed << std::setprecision(2) << bestMakespan << "\n";
+    std::cout << "  Improvement over worst:  " << improvement << "%\n";
+    std::cout << "  Fastest execution time:  " << fastestRuntime << " ms\n\n";
+
+    std::cout << tableBorder << "\n\n";
 
     return ok ? 0 : 1;
 }

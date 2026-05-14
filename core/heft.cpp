@@ -18,6 +18,7 @@
 #include "AlgorithmResult.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -89,6 +90,8 @@ static double computeEFT(const DAGData& dag,
 
 AlgorithmResult heft_schedule(const DAGData& dag)
 {
+	auto startTime = std::chrono::high_resolution_clock::now();
+
 	const int n = static_cast<int>(dag.tasks.size());
 	const int m = static_cast<int>(dag.vms.size());
 
@@ -133,12 +136,16 @@ AlgorithmResult heft_schedule(const DAGData& dag)
 		vmReady[bestVM] = bestEFT;
 	}
 
+	auto endTime = std::chrono::high_resolution_clock::now();
+	double runtimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+
 	AlgorithmResult result;
 	result.algorithmName = "HEFT";
 	result.algorithmDesc = "Upward-rank priority + greedy EFT VM assignment";
 	result.entries       = entries;
 	result.isValid        = true;
 	result.makespan       = *std::max_element(vmReady.begin(), vmReady.end());
+	result.runtimeMs     = runtimeMs;
 
 	return result;
 }
