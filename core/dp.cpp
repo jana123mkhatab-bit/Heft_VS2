@@ -21,7 +21,6 @@
 
 #include "dp.h"
 #include "dag_generator.h"
-#include "AlgorithmResult.h"
 
 #include <iostream>
 #include <iomanip>
@@ -29,9 +28,9 @@
 #include <functional>
 #include <limits>
 #include <numeric>
-#include <map>
+using namespace std;
 
-static constexpr double INF = std::numeric_limits<double>::max();
+static constexpr double INF = numeric_limits<double>::max();
 
 // ============================================================
 //  INTERNAL HELPERS
@@ -100,7 +99,7 @@ static double computeEFT(const DAGData& dag,
  * rank_u(t) = avgExecTime(t) + max over successors s of (commCost(t,s) + rank_u(s))
  * Computed recursively with memoisation.
  */
-static std::vector<double> computeUpwardRank(const DAGData& dag)
+static vector<double> computeUpwardRank(const DAGData& dag)
 {
     int n = static_cast<int>(dag.tasks.size());
     std::vector<double> rank(n, -1.0);
@@ -135,7 +134,7 @@ static std::vector<double> computeUpwardRank(const DAGData& dag)
  * Entry tasks (no predecessors) have rank_d = 0.
  * Computed recursively with memoisation.
  */
-static std::vector<double> computeDownwardRank(const DAGData& dag)
+static vector<double> computeDownwardRank(const DAGData& dag)
 {
     int n = static_cast<int>(dag.tasks.size());
     std::vector<double> rank(n, -1.0);
@@ -165,33 +164,33 @@ static std::vector<double> computeDownwardRank(const DAGData& dag)
 //  PUBLIC: dp_heft
 // ============================================================
 
-AlgorithmResult dp_heft(const DAGData& dag)
-{
-    int n = static_cast<int>(dag.tasks.size());
+DPResult dp_heft(const DAGData& dag)
+{ ////////
+    int n = static_cast<int>(dag.tasks.size()); //remove the static cast
     int m = static_cast<int>(dag.vms.size());
 
     // ── Step 1: Compute bilateral rank ──────────────────────────────────────
-    std::vector<double> upRank = computeUpwardRank(dag);
-    std::vector<double> dnRank = computeDownwardRank(dag);
+    vector<double> upRank = computeUpwardRank(dag);
+    vector<double> dnRank = computeDownwardRank(dag);
 
-    std::vector<double> biRank(n);
+    vector<double> biRank(n);
     for (int i = 0; i < n; ++i)
         biRank[i] = upRank[i] + dnRank[i];
 
     // ── Step 2: Sort tasks by bilateral rank (descending) ────────────────────
-    std::vector<int> priority(n);
-    std::iota(priority.begin(), priority.end(), 0);
-    std::sort(priority.begin(), priority.end(),
+    vector<int> priority(n);
+    iota(priority.begin(), priority.end(), 0);
+    sort(priority.begin(), priority.end(),
               [&](int a, int b) { return biRank[a] > biRank[b]; });
 
     // ── Step 3: Greedy assignment with 2-task look-ahead DP ─────────────────
-    std::vector<double>          vmReady(m, 0.0);
-    std::map<int, ScheduleEntry> scheduled;
+    vector<double> vmReady(m, 0.0);
+    map<int, ScheduleEntry> scheduled;
 
     for (int pi = 0; pi < n; ++pi) {
         int tid = priority[pi];
 
-        int    bestVM    = 0;
+        int bestVM = 0;
         double bestEFT   = INF;
         double bestEST   = 0.0;
         double bestScore = INF;
@@ -206,10 +205,10 @@ AlgorithmResult dp_heft(const DAGData& dag)
                 int nextTid = priority[pi + 1];
 
                 // Temporarily commit current task to VM v
-                std::vector<double>          tmpVmR   = vmReady;
-                std::map<int, ScheduleEntry> tmpSched  = scheduled;
-                tmpVmR[v]      = eft;
-                tmpSched[tid]  = {tid, v, est, eft};
+                vector<double> tmpVmR = vmReady;
+                map<int, ScheduleEntry> tmpSched = scheduled;
+                tmpVmR[v] = eft;
+                tmpSched[tid] = {tid, v, est, eft};
 
                 double bestNextEFT = INF;
                 for (int nv = 0; nv < m; ++nv) {
@@ -230,34 +229,28 @@ AlgorithmResult dp_heft(const DAGData& dag)
         }
 
         // Commit the chosen assignment
-        scheduled[tid]  = {tid, bestVM, bestEST, bestEFT};
-        vmReady[bestVM] = bestEFT;
+        scheduled[tid]   = {tid, bestVM, bestEST, bestEFT};
+        vmReady[bestVM]  = bestEFT;
     }
 
-    // ── Step 4: Build AlgorithmResult ───────────────────────────────────────
-    AlgorithmResult result;
-    result.algorithmName = "HEFT + DP";
-    result.algorithmDesc = "Bilateral-rank priority + 2-task look-ahead DP assignment";
-    result.isValid       = true;
-    result.makespan      = *std::max_element(vmReady.begin(), vmReady.end());
-
+    // ── Step 4: Build result ─────────────────────────────────────────────────
+    DPResult result;
     for (const auto& kv : scheduled)
         result.entries.push_back(kv.second);
 
+    result.makespan = *std::max_element(vmReady.begin(), vmReady.end());
     return result;
 }
 
 // ============================================================
-//  PUBLIC: printAlgorithmResult  (shared printer for all algorithms)
+//  PUBLIC: printDPResult
 // ============================================================
 
-void printAlgorithmResult(const AlgorithmResult& result)
+void printDPResult(const DPResult& result)
 {
     const std::string border(60, '=');
     std::cout << "\n" << border << "\n";
-    std::cout << "  " << result.algorithmName << "\n";
-    if (!result.algorithmDesc.empty())
-        std::cout << "  " << result.algorithmDesc << "\n";
+    std::cout << "  HEFT + DP (Bilateral Rank + 2-Task Look-Ahead)\n";
     std::cout << border << "\n\n";
 
     // Sort entries by task ID for clean display
@@ -282,8 +275,6 @@ void printAlgorithmResult(const AlgorithmResult& result)
                   << std::setw(12) << se.finishTime << "\n";
     }
 
-    std::cout << "\n  Makespan  : " << result.makespan << "\n";
-    if (result.runtimeMs > 0.0)
-        std::cout << "  Runtime   : " << result.runtimeMs << " ms\n";
+    std::cout << "\n  Makespan : " << result.makespan << "\n";
     std::cout << border << "\n\n";
 }
