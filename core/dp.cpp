@@ -28,6 +28,8 @@
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <map>
+#include <vector>
 using namespace std;
 
 static constexpr double INF = numeric_limits<double>::max();
@@ -164,9 +166,9 @@ static vector<double> computeDownwardRank(const DAGData& dag)
 //  PUBLIC: dp_heft
 // ============================================================
 
-DPResult dp_heft(const DAGData& dag)
-{ ////////
-    int n = static_cast<int>(dag.tasks.size()); //remove the static cast
+AlgorithmResult dp_heft(const DAGData& dag)
+{
+    int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
     // ── Step 1: Compute bilateral rank ──────────────────────────────────────
@@ -234,7 +236,9 @@ DPResult dp_heft(const DAGData& dag)
     }
 
     // ── Step 4: Build result ─────────────────────────────────────────────────
-    DPResult result;
+    AlgorithmResult result;
+    result.algorithmName = "HEFT + DP";
+    result.algorithmDesc = "Bilateral rank with 2-task look-ahead";
     for (const auto& kv : scheduled)
         result.entries.push_back(kv.second);
 
@@ -243,14 +247,14 @@ DPResult dp_heft(const DAGData& dag)
 }
 
 // ============================================================
-//  PUBLIC: printDPResult
+//  PUBLIC: printAlgorithmResult (for DP results)
 // ============================================================
 
-void printDPResult(const DPResult& result)
+void printAlgorithmResult(const AlgorithmResult& result)
 {
     const std::string border(60, '=');
     std::cout << "\n" << border << "\n";
-    std::cout << "  HEFT + DP (Bilateral Rank + 2-Task Look-Ahead)\n";
+    std::cout << "  " << result.algorithmName << "\n";
     std::cout << border << "\n\n";
 
     // Sort entries by task ID for clean display

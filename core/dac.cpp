@@ -28,8 +28,8 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
 
     auto startTimeMs = std::chrono::high_resolution_clock::now();
 
-    int n = dag.tasks.size();
-    int m = dag.vms.size();
+    int n = static_cast<int>(dag.tasks.size());
+    int m = static_cast<int>(dag.vms.size());
 
     // ============================================================
     // 🔷 STEP 1 — DIVIDE (Topological Levels)
@@ -50,7 +50,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
     vector<vector<int>> levels;
 
     while (!q.empty()) {
-        int sz = q.size();
+        int sz = static_cast<int>(q.size());
         vector<int> level;
 
         for (int i = 0; i < sz; ++i) {
@@ -76,7 +76,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
 
     vector<vector<LocalAssign>> clusterSchedules(levels.size());
 
-    for (size_t l = 0; l < levels.size(); ++l) {
+    for (int l = 0; l < static_cast<int>(levels.size()); ++l) {
 
         vector<int> cluster = levels[l];
 
