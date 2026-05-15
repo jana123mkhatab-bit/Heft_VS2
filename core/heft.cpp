@@ -1,17 +1,4 @@
-/**
- * heft.cpp
- * --------
- * Greedy HEFT implementation.
- *
- * Steps:
- *   1. Compute upward rank for all tasks.
- *   2. Sort tasks by descending upward rank.
- *   3. For each task, choose the VM with the smallest EFT.
- *
- * Communication cost model matches the other algorithms:
- *   If predecessor and successor run on different VMs,
- *   cost = 0.3 * average execution time of the predecessor.
- */
+ 
 
 #include "heft.h"
 #include "dag_generator.h"
@@ -27,7 +14,7 @@
 
 static constexpr double HEFT_INF = std::numeric_limits<double>::max();
 
-// Average execution time of a task across all VMs.
+
 static double avgExecTime(const DAGData& dag, int taskId)
 {
 	double sum = 0.0;
@@ -35,14 +22,14 @@ static double avgExecTime(const DAGData& dag, int taskId)
 	return sum / static_cast<double>(dag.tasks[taskId].execTimes.size());
 }
 
-// Communication cost between predecessor and successor when on different VMs.
+
 static double commCost(const DAGData& dag, int predTask, int predVm, int succVm)
 {
 	if (predVm == succVm) return 0.0;
 	return dag.commCostFactor * avgExecTime(dag, predTask);
 }
 
-// Upward rank: rank_u(t) = avgExec(t) + max_s (comm(t,s) + rank_u(s))
+
 static std::vector<double> computeUpwardRank(const DAGData& dag)
 {
 	int n = static_cast<int>(dag.tasks.size());
@@ -63,7 +50,7 @@ static std::vector<double> computeUpwardRank(const DAGData& dag)
 	return rank;
 }
 
-// Earliest Finish Time for task on vm, given current schedule state.
+
 static double computeEFT(const DAGData& dag,
 						 int taskId, int vmId,
 						 const std::vector<double>& vmReady,
@@ -83,9 +70,9 @@ static double computeEFT(const DAGData& dag,
 	return est + dag.tasks[taskId].execTimes[vmId];
 }
 
-// ============================================================
-//  PUBLIC: heft_schedule
-// ============================================================
+
+
+
 
 AlgorithmResult heft_schedule(const DAGData& dag)
 {

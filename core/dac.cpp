@@ -3,7 +3,7 @@
 #include <queue>
 #include <vector>
 #include <algorithm>
-#include <numeric>   // for accumulate
+#include <numeric>   
 #include <chrono>
 
 using namespace std;
@@ -11,7 +11,7 @@ using namespace std;
 static double dac_commCost(const DAGData& dag,
                            int predTask,
                            int predVm,
-                           int /*succTask*/,
+                           int  ,
                            int succVm)
 {
     if (predVm == succVm) return 0.0;
@@ -30,9 +30,9 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
-    // ============================================================
-    // 🔷 STEP 1 — DIVIDE (Topological Levels)
-    // ============================================================
+    
+    
+    
 
     vector<int> indegree(n, 0);
 
@@ -64,9 +64,9 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
         levels.push_back(level);
     }
 
-    // ============================================================
-    // 🔷 STEP 2 — CONQUER (Improved Local Scheduling)
-    // ============================================================
+    
+    
+    
 
     struct LocalAssign {
         int taskId;
@@ -79,7 +79,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
 
         vector<int> cluster = levels[l];
 
-        // 🔥 Better sorting: average execution time
+        
         sort(cluster.begin(), cluster.end(), [&](int a, int b) {
 
             double avgA = accumulate(
@@ -118,9 +118,9 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
         }
     }
 
-    // ============================================================
-    // 🔷 STEP 3 — MERGE (Communication-Aware)
-    // ============================================================
+    
+    
+    
 
     vector<double> globalVmFree(m, 0.0);
     vector<double> taskFinish(n, 0.0);
@@ -138,7 +138,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
             int u = sched.taskId;
             int v = sched.vmId;
 
-            // 🔥 Compute dependency-aware ready time WITH COMM COST
+            
             double readyTime = 0.0;
 
             for (int pred : dag.tasks[u].predecessors) {
@@ -169,9 +169,9 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
         }
     }
 
-    // ============================================================
-    // 🔷 FINAL METRICS
-    // ============================================================
+    
+    
+    
 
     double makespan = 0.0;
     for (double f : taskFinish)

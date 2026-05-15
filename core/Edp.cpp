@@ -1,18 +1,4 @@
-/**
- * Edp.cpp
- * -------
- * Implementation of edp_heft — Enhanced Dynamic Programming HEFT.
- *
- * Returns an AlgorithmResult (from AlgorithmResult.h) so it is fully
- * compatible with printAlgorithmResult() and any future comparison code.
- *
- * Algorithm summary:
- *   PHASE 1 — Bilateral rank priority (upRank + downRank, descending)
- *   PHASE 2 — Full n×m DP table to find globally optimal VM assignments
- *   PHASE 3 — Replay the optimal assignment to compute exact EST/EFT timestamps
- *
- * No Qt. No external libraries. Pure Standard C++11+.
- */
+ 
 
 #include "Edp.h"
 #include "dag_generator.h"
@@ -33,9 +19,9 @@ using namespace std;
 
 static constexpr double EDP_INF = numeric_limits<double>::max() / 2.0;
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 1 — COST HELPERS
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static double edp_avgExec(const DAGData& dag, int taskId)
 {
@@ -47,15 +33,15 @@ static double edp_avgExec(const DAGData& dag, int taskId)
 
 static double edp_commCost(const DAGData& dag,
                             int predTask, int predVm,
-                            int /*succTask*/, int succVm)
+                            int  , int succVm)
 {
     if (predVm == succVm) return 0.0;
     return dag.commCostFactor * edp_avgExec(dag, predTask);
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 2 — BILATERAL RANK
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static vector<double> edp_upwardRank(const DAGData& dag)
 {
@@ -95,9 +81,9 @@ static vector<double> edp_downwardRank(const DAGData& dag)
     return rank;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 3 — SNAPSHOT AND EFT
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 struct EDPSnapshot {
     vector<double> vmReady;
@@ -122,9 +108,9 @@ static double edp_computeEFT(const DAGData& dag,
     return est + dag.tasks[taskId].execTimes[vmId];
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 4 — DP ENGINE
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 {
@@ -132,20 +118,20 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
     int m = static_cast<int>(dag.vms.size());
     int T = static_cast<int>(dag.tasks.size());
 
-    // dp[i][v] = true global makespan after scheduling priority[0..i] with
-    // priority[i] on VM v.  We store the full vmReady vector here instead of
-    // a scalar so the NEXT step can compute accurate EFTs.
+    
+    
+    
     struct State {
         double makespan = EDP_INF;
-        vector<double> vmReady;      // length m
-        vector<double> taskFinish;   // length T, -1 if unscheduled
-        vector<int>    taskVm;       // length T, -1 if unscheduled
+        vector<double> vmReady;      
+        vector<double> taskFinish;   
+        vector<int>    taskVm;       
     };
 
-    // Only keep two rows at a time — O(m × T) memory instead of O(n×m×T)
+    
     vector<State> prev(m), curr(m);
 
-    // Initialise rows
+    
     auto initState = [&](State& s) {
         s.makespan = EDP_INF;
         s.vmReady.assign(m, 0.0);
@@ -155,11 +141,11 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
     for (auto& s : prev) initState(s);
     for (auto& s : curr) initState(s);
 
-    // parent[i][v] = which prev_v produced dp[i][v]
-    // We still need all rows of parent for backtracking.
+    
+    
     vector<vector<int>> parent(n, vector<int>(m, -1));
 
-    // ── Base case ────────────────────────────────────────────────────
+    
     {
         int tid = priority[0];
         EDPSnapshot snap0;
@@ -171,28 +157,28 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
             double est = 0.0;
             double eft = edp_computeEFT(dag, tid, v, snap0, est);
 
-            prev[v].vmReady    = snap0.vmReady;   // all zeros
+            prev[v].vmReady    = snap0.vmReady;   
             prev[v].vmReady[v] = eft;
             prev[v].taskFinish = snap0.taskFinish;
             prev[v].taskFinish[tid] = eft;
             prev[v].taskVm    = snap0.taskVm;
             prev[v].taskVm[tid] = v;
-            prev[v].makespan  = eft;              // only one task scheduled
+            prev[v].makespan  = eft;              
         }
     }
 
-    // ── Forward fill ─────────────────────────────────────────────────
+    
     for (int i = 1; i < n; ++i) {
         int tid = priority[i];
 
-        // Reset curr row
+        
         for (auto& s : curr) initState(s);
 
         for (int prev_v = 0; prev_v < m; ++prev_v) {
             if (prev[prev_v].makespan >= EDP_INF) continue;
             const State& ps = prev[prev_v];
 
-            // Build a temporary snapshot from ps for edp_computeEFT
+            
             EDPSnapshot snap;
             snap.vmReady    = ps.vmReady;
             snap.taskFinish = ps.taskFinish;
@@ -202,11 +188,11 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
                 double est = 0.0;
                 double eft = edp_computeEFT(dag, tid, v, snap, est);
 
-                // Build the NEW vmReady after placing tid on v
+                
                 vector<double> newVmReady = ps.vmReady;
                 newVmReady[v] = max(newVmReady[v], eft);
 
-                // *** Fix: makespan = max over the UPDATED vmReady ***
+                
                 double newMakespan = *max_element(newVmReady.begin(),
                                                   newVmReady.end());
 
@@ -225,7 +211,7 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
         swap(prev, curr);
     }
 
-    // ── Find optimal final VM ─────────────────────────────────────────
+    
     int    bestFinalVM  = 0;
     double bestMakespan = EDP_INF;
     for (int v = 0; v < m; ++v) {
@@ -235,7 +221,7 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
         }
     }
 
-    // ── Backtrack ─────────────────────────────────────────────────────
+    
     vector<int> assignment(n);
     assignment[n-1] = bestFinalVM;
     for (int i = n - 1; i > 0; --i)
@@ -243,9 +229,9 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 
     return assignment;
 }
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 5 — PUBLIC API: edp_heft
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 AlgorithmResult edp_heft(const DAGData& dag)
 {
@@ -254,7 +240,7 @@ AlgorithmResult edp_heft(const DAGData& dag)
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
-    // Phase 1: Bilateral rank priority
+    
     vector<double> upRank = edp_upwardRank(dag);
     vector<double> dnRank = edp_downwardRank(dag);
 
@@ -263,14 +249,14 @@ AlgorithmResult edp_heft(const DAGData& dag)
         biRank[i] = upRank[i] + dnRank[i];
 
 
-// ✓ Kahn's algorithm combined with HEFT rank prioritization for DAG-safe ordering
+
     struct RankCmp {
         const vector<double>& biRank;
 
         RankCmp(const vector<double>& r) : biRank(r) {}
 
         bool operator()(int a, int b) const {
-            return biRank[a] < biRank[b];  // Max-heap: higher rank comes first
+            return biRank[a] < biRank[b];  
         }
     };
 
@@ -307,10 +293,10 @@ AlgorithmResult edp_heft(const DAGData& dag)
         }
     }
 
-    // Phase 2: DP VM assignment
+    
     vector<int> assignment = edp_runDP(dag, priority);
 
-    // Phase 3: Replay to compute exact EST/EFT timestamps
+    
     vector<double>      vmReady(m, 0.0);
     map<int, ScheduleEntry> scheduled;
 
@@ -338,7 +324,7 @@ AlgorithmResult edp_heft(const DAGData& dag)
     auto endTime = std::chrono::high_resolution_clock::now();
     double runtimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
 
-    // Build AlgorithmResult
+    
     AlgorithmResult result;
     result.algorithmName = "EDP-HEFT";
     result.algorithmDesc = "Bilateral rank + Full Global DP VM Selection  |  O(n * m^2)";

@@ -1,18 +1,4 @@
-/**
- * op.cpp
- * ------
- * Implementation of merge_schedule: Optimization Algorithm (OP).
- *
- * Hybrid scheduler combining:
- *   - DP-HEFT bilateral ranking + local look-ahead
- *   - EDP-HEFT global DP state optimization
- *   - D&C level decomposition + parallel subproblem scheduling
- *
- * Three phases:
- *   Phase 1: Graph Analysis — classify DAG structure
- *   Phase 2: Adaptive Scheduling — per-level strategy selection
- *   Phase 3: Global Refinement — bottleneck detection + task migration
- */
+ 
 
 #include "merge.h"
 #include "dag_generator.h"
@@ -33,9 +19,9 @@ using namespace std;
 
 static constexpr double merge_INF = numeric_limits<double>::max() / 2.0;
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 1 — COST AND RANK HELPERS
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static double merge_avgExec(const DAGData& dag, int taskId)
 {
@@ -90,9 +76,9 @@ static vector<double> merge_downwardRank(const DAGData& dag)
     return rank;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 2 — TOPOLOGICAL LEVELLING (from D&C)
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static vector<vector<int>> merge_computeLevels(const DAGData& dag)
 {
@@ -161,7 +147,7 @@ static DAGProfile analyzeDAG(const DAGData& dag,
     double maxEdges = static_cast<double>(n) * (n - 1) / 2.0;
     p.density = (maxEdges > 0) ? p.totalEdges / maxEdges : 0.0;
 
-    // Critical path length = max upward rank (already computed)
+    
     p.criticalPathLen = *max_element(upRank.begin(), upRank.end());
 
     p.isDeep  = (p.numLevels > p.avgLevelWidth);
@@ -170,15 +156,15 @@ static DAGProfile analyzeDAG(const DAGData& dag,
     return p;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 4 — SCHEDULING PRIMITIVES
-// ════════════════════════════════════════════════════════════════════════════
 
-// Shared schedule state used across all strategy functions
+
+
+
+
 struct ScheduleState {
     vector<double>          vmReady;
-    vector<double>          taskFinish;  // indexed by taskId
-    vector<int>             taskVm;      // indexed by taskId
+    vector<double>          taskFinish;  
+    vector<int>             taskVm;      
     map<int, ScheduleEntry> scheduled;
 };
 
@@ -204,13 +190,13 @@ static void commitTask(ScheduleState& st, int taskId, int vmId,
     st.scheduled[taskId]  = {taskId, vmId, est, eft};
 }
 
-// --- Strategy A: D&C-style greedy for highly parallel levels ---
+
 static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
                               ScheduleState& st)
 {
     int m = static_cast<int>(dag.vms.size());
 
-    // Sort tasks by descending average exec time (heavy first)
+    
     vector<int> sorted = tasks;
     sort(sorted.begin(), sorted.end(), [&](int a, int b) {
         return merge_avgExec(dag, a) > merge_avgExec(dag, b);
@@ -234,18 +220,18 @@ static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
     }
 }
 
-// --- Strategy X: Greedy Min-Min for levels with uniform or moderate tasks ---
+
 static void scheduleLevel_MinMin(const DAGData& dag, const vector<int>& tasks,
                                  ScheduleState& st)
 {
     int m = static_cast<int>(dag.vms.size());
     if (tasks.empty()) return;
 
-    // Remaining tasks set
+    
     vector<int> remaining = tasks;
 
     while (!remaining.empty()) {
-        // For each task, find its best VM (min EFT)
+        
         double bestGlobalEFT = merge_INF;
         int bestTaskIdx = 0;
         int bestTaskId = remaining[0];
@@ -273,17 +259,17 @@ static void scheduleLevel_MinMin(const DAGData& dag, const vector<int>& tasks,
             }
         }
 
-        // Commit the chosen task
+        
         double est = 0.0;
         double eft = merge_computeEFT(dag, bestTaskId, bestTaskVM, st, est);
         commitTask(st, bestTaskId, bestTaskVM, est, eft);
 
-        // Remove assigned task from remaining
+        
         remaining.erase(remaining.begin() + bestTaskIdx);
     }
 }
 
-// --- Strategy Y: HEFT per-level (upward-rank priority) ---
+
 static void scheduleLevel_HEFT(const DAGData& dag, const vector<int>& tasks,
                                const vector<double>& upRank, ScheduleState& st)
 {
@@ -312,13 +298,13 @@ static void scheduleLevel_HEFT(const DAGData& dag, const vector<int>& tasks,
     }
 }
 
-// --- Strategy B: DP look-ahead for medium-width levels ---
+
 static void scheduleLevel_DP(const DAGData& dag, const vector<int>& tasks,
                              const vector<double>& biRank, ScheduleState& st)
 {
     int m = static_cast<int>(dag.vms.size());
 
-    // Sort by bilateral rank descending within the level
+    
     vector<int> sorted = tasks;
     sort(sorted.begin(), sorted.end(), [&](int a, int b) {
         return biRank[a] > biRank[b];
@@ -335,11 +321,11 @@ static void scheduleLevel_DP(const DAGData& dag, const vector<int>& tasks,
             double est = 0.0;
             double eft = merge_computeEFT(dag, tid, v, st, est);
 
-            // 2-task look-ahead within this level
+            
             double lookahead = 0.0;
             if (pi + 1 < sorted.size()) {
                 int nextTid = sorted[pi + 1];
-                // Simulate committing current task
+                
                 ScheduleState tmpSt = st;
                 commitTask(tmpSt, tid, v, est, eft);
 
@@ -364,7 +350,7 @@ static void scheduleLevel_DP(const DAGData& dag, const vector<int>& tasks,
     }
 }
 
-// --- Strategy C: EDP global DP for critical-path levels ---
+
 static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
                               const vector<double>& biRank, ScheduleState& st)
 {
@@ -372,18 +358,18 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
     int k = static_cast<int>(tasks.size());
     if (k == 0) return;
 
-    // Sort by bilateral rank descending
+    
     vector<int> sorted = tasks;
     sort(sorted.begin(), sorted.end(), [&](int a, int b) {
         return biRank[a] > biRank[b];
     });
 
-    // DP table: dp[i][v] = best makespan when i-th task in sorted goes to VM v
+    
     vector<vector<double>> dp(k, vector<double>(m, merge_INF));
     vector<vector<int>>    parent(k, vector<int>(m, -1));
     vector<vector<ScheduleState>> snapshots(k, vector<ScheduleState>(m, st));
 
-    // Base case: first task on each VM
+    
     {
         int tid = sorted[0];
         for (int v = 0; v < m; ++v) {
@@ -395,7 +381,7 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
         }
     }
 
-    // Forward fill
+    
     for (int i = 1; i < k; ++i) {
         int tid = sorted[i];
         for (int prev_v = 0; prev_v < m; ++prev_v) {
@@ -417,7 +403,7 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
         }
     }
 
-    // Find best final VM
+    
     int bestFinalVM = 0;
     double bestMakespan = merge_INF;
     for (int v = 0; v < m; ++v) {
@@ -427,13 +413,13 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
         }
     }
 
-    // Backtrack to get assignments
+    
     vector<int> assignment(k);
     assignment[k-1] = bestFinalVM;
     for (int i = k - 1; i > 0; --i)
         assignment[i-1] = parent[i][assignment[i]];
 
-    // Replay assignments onto the real state
+    
     for (int i = 0; i < k; ++i) {
         int tid = sorted[i];
         int vm  = assignment[i];
@@ -443,9 +429,9 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 5 — ADAPTIVE LEVEL CLASSIFICATION
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 enum class LevelStrategy { DAC, HEFT, GREEDY_MINMIN, DP_LOOKAHEAD, EDP_GLOBAL };
 
@@ -458,15 +444,15 @@ static LevelStrategy classifyLevel(const DAGData& dag,
     int width = static_cast<int>(level.size());
     int totalTasks = static_cast<int>(dag.tasks.size());
 
-    // 1) Very wide levels: use D&C to avoid scheduler bottlenecks
+    
     if (width > 2 * m)
         return LevelStrategy::DAC;
 
-    // 2) Large workflows: HEFT for speed and scalability
+    
     if (totalTasks >= 4 * m)
         return LevelStrategy::HEFT;
 
-    // 3) Task uniformity: compute coefficient of variation of avg exec times
+    
     double sum = 0.0;
     vector<double> vals;
     for (int tid : level) {
@@ -480,17 +466,17 @@ static LevelStrategy classifyLevel(const DAGData& dag,
     double stddev = (vals.empty() ? 0.0 : sqrt(var / static_cast<double>(vals.size())));
     double cov = (mean > 0.0 ? stddev / mean : 0.0);
 
-    // If tasks are roughly uniform, prefer Min-Min greedy
+    
     if (cov <= 0.15)
         return LevelStrategy::GREEDY_MINMIN;
 
-    // Moderate variability: use DP look-ahead if affordable, otherwise Min-Min
+    
     if (cov > 0.15 && cov <= 0.6) {
         if (width <= 3 * m) return LevelStrategy::DP_LOOKAHEAD;
         return LevelStrategy::GREEDY_MINMIN;
     }
 
-    // High variability: consider critical-path and EDP if small; else DP or Min-Min
+    
     double critThreshold = profile.criticalPathLen * 0.6;
     bool hasCritical = false;
     for (int tid : level) if (upRank[tid] >= critThreshold) { hasCritical = true; break; }
@@ -503,9 +489,9 @@ static LevelStrategy classifyLevel(const DAGData& dag,
     return LevelStrategy::GREEDY_MINMIN;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  Makespan computation.
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 static double computeMakespan(const ScheduleState& st, int n)
 {
@@ -515,9 +501,9 @@ static double computeMakespan(const ScheduleState& st, int n)
     return ms;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 7 — PUBLIC API: merge_schedule
-// ════════════════════════════════════════════════════════════════════════════
+
+
+
 
 AlgorithmResult merge_schedule(const DAGData& dag)
 {
@@ -526,7 +512,7 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
-    // ── Phase 1: Graph Analysis ──────────────────────────────────────────────
+    
     vector<double> upRank = merge_upwardRank(dag);
     vector<double> dnRank = merge_downwardRank(dag);
 
@@ -537,13 +523,13 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     vector<vector<int>> levels = merge_computeLevels(dag);
     DAGProfile profile = analyzeDAG(dag, levels, upRank);
 
-    // ── Phase 2: Adaptive Per-Level Scheduling ───────────────────────────────
+    
     ScheduleState st;
     st.vmReady.assign(m, 0.0);
     st.taskFinish.assign(n, 0.0);
     st.taskVm.assign(n, -1);
 
-    // Adaptive per-level scheduling: select best strategy per level
+    
     ScheduleState stAdaptive = st;
 
     for (const auto& level : levels) {
@@ -569,7 +555,7 @@ AlgorithmResult merge_schedule(const DAGData& dag)
 
     st = stAdaptive;
 
-    // ── Build AlgorithmResult ────────────────────────────────────────────────
+    
     AlgorithmResult result;
     result.algorithmName = "Optimization Algorithm (OP)";
     result.algorithmDesc = "Adaptive hybrid: D&C + HEFT + Min-Min + DP + EDP";

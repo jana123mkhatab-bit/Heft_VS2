@@ -1,64 +1,29 @@
-/**
- * dag_generator.cpp
- * -----------------
- * Implementation of the DAG Task Scheduling Generator.
- *
- * Implements:
- *   - generateDAG()  : random DAG creation using mt19937
- *   - calculateCommCostFactor()  : dynamic comm cost factor based on DAG characteristics
- *   - validateDAG()  : strict structural validation (8 checks)
- *   - printDAG()     : formatted console output
- *
- * Design Notes:
- *   Acyclicity is guaranteed by construction: edges are only ever
- *   created from node i to node j where j > i. This means no topological
- *   sort is needed during generation – the node index IS the topological order.
- *   This approach matches standard research methodology for synthetic DAG
- *   benchmarks (e.g., GE, STG, Epigenomics workflows).
- *
- *   Communication cost factor is now dynamically calculated based on:
- *     - Task granularity (fine-grained tasks → lower factor)
- *     - System heterogeneity (more diverse VMs → higher factor)
- *     - Graph density (denser graphs → higher factor)
- *
- * Compatibility: Visual Studio 2019/2022, C++11 or above.
- *   No Qt. No external libraries. Pure Standard C++.
- */
+ 
 
 #include "dag_generator.h"
 
-#include <iostream>   // std::cout, std::cerr
-#include <iomanip>    // std::fixed, std::setprecision, std::setw
-#include <random>     // std::random_device, std::mt19937, distributions
-#include <set>        // std::set (duplicate-edge detection)
-#include <algorithm>  // std::find
-#include <cmath>      // std::sqrt
-#include <limits>     // std::numeric_limits
+#include <iostream>   
+#include <iomanip>    
+#include <random>     
+#include <set>        
+#include <algorithm>  
+#include <cmath>      
+#include <limits>     
 
-// ============================================================
-//  INTERNAL HELPERS (file-scope only, not exposed in header)
-// ============================================================
 
-/**
- * makeRandomEngine
- * ----------------
- * Creates and returns a seeded Mersenne Twister engine.
- * std::random_device provides non-deterministic entropy on most platforms.
- */
+
+
+
+ 
 static std::mt19937 makeRandomEngine()
 {
-    // Fixed seed → same DAG every run (reproducible results).
-    // Change the number below to get a different-but-consistent DAG.
+    
+    
     constexpr unsigned int FIXED_SEED = 42u;
     return std::mt19937(FIXED_SEED);
 }
 
-/**
- * generateVMs
- * -----------
- * Populates 'vms' with 'numVMs' VMs, each assigned a random speedFactor
- * drawn from a uniform distribution in [SPEED_MIN, SPEED_MAX].
- */
+ 
 static void generateVMs(std::vector<VM>& vms, int numVMs, std::mt19937& gen)
 {
     std::uniform_real_distribution<double> speedDist(SPEED_MIN, SPEED_MAX);
@@ -74,13 +39,7 @@ static void generateVMs(std::vector<VM>& vms, int numVMs, std::mt19937& gen)
     }
 }
 
-/**
- * generateTasks
- * -------------
- * Initialises 'numTasks' Task objects with unique IDs and random
- * execution times for each VM. Edge wiring (predecessors/successors)
- * is done separately in generateEdges().
- */
+ 
 static void generateTasks(std::vector<Task>& tasks, int numTasks,
                            int numVMs, std::mt19937& gen)
 {
@@ -93,7 +52,7 @@ static void generateTasks(std::vector<Task>& tasks, int numTasks,
         Task task;
         task.id = t;
 
-        // One execution time entry per VM
+        
         task.execTimes.reserve(numVMs);
         for (int v = 0; v < numVMs; ++v) {
             task.execTimes.push_back(execDist(gen));
@@ -103,22 +62,7 @@ static void generateTasks(std::vector<Task>& tasks, int numTasks,
     }
 }
 
-/**
- * generateEdges
- * -------------
- * Adds directed edges to the DAG using a probabilistic model.
- *
- * For every ordered pair (i, j) with i < j, an edge i→j is created
- * with probability EDGE_PROBABILITY. This ordering GUARANTEES acyclicity
- * without any cycle-detection overhead.
- *
- * After generating all candidate edges, the function guarantees
- * at least one edge exists (adds edge 0→1 if the graph is empty,
- * or 0→(numTasks-1) for single-task-pair graphs).
- *
- * Duplicate edges are prevented by the ordered-pair uniqueness guarantee
- * (each (i,j) pair is visited exactly once).
- */
+ 
 static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
 {
     const int numTasks = static_cast<int>(tasks.size());
@@ -131,7 +75,7 @@ static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
     for (int i = 0; i < numTasks; ++i) {
         for (int j = i + 1; j < numTasks; ++j) {
             if (probDist(gen) < EDGE_PROBABILITY) {
-                // Wire edge i → j
+                
                 tasks[i].successors.push_back(j);
                 tasks[j].predecessors.push_back(i);
                 ++totalEdges;
@@ -139,7 +83,7 @@ static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
         }
     }
 
-    // Guarantee at least one edge exists in the graph
+    
     if (totalEdges == 0) {
         int src = 0;
         int dst = numTasks - 1;
@@ -148,48 +92,48 @@ static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
     }
 }
 
-// ============================================================
-//  PUBLIC API IMPLEMENTATIONS
-// ============================================================
+
+
+
 
 DAGData generateDAG(int numTasks, int numVMs)
 {
-    // Clamp inputs to sensible minimums
+    
     if (numTasks < 2) numTasks = 2;
     if (numVMs   < 1) numVMs   = 1;
 
     DAGData dag;
     std::mt19937 gen = makeRandomEngine();
 
-    // Step 1: Build VMs
+    
     generateVMs(dag.vms, numVMs, gen);
 
-    // Step 2: Initialise tasks with exec times (no edges yet)
+    
     generateTasks(dag.tasks, numTasks, numVMs, gen);
 
-    // Step 3: Wire edges (guarantees acyclicity by construction)
+    
     generateEdges(dag.tasks, gen);
 
-    // Step 4: Calculate communication cost factor dynamically
+    
     dag.commCostFactor = calculateCommCostFactor(dag);
 
     return dag;
 }
 
-// ============================================================
-//  DYNAMIC COMMUNICATION COST FACTOR CALCULATION
-// ============================================================
+
+
+
 
 double calculateCommCostFactor(const DAGData& dag)
 {
     const int numTasks = static_cast<int>(dag.tasks.size());
     const int numVMs   = static_cast<int>(dag.vms.size());
     
-    if (numTasks < 2 || numVMs < 1) return 0.3; // Default fallback
+    if (numTasks < 2 || numVMs < 1) return 0.3; 
 
-    // ───────────────────────────────────────────────────────────────
-    // 1. TASK GRANULARITY: Ratio of avg exec time to total work
-    // ───────────────────────────────────────────────────────────────
+    
+    
+    
     double totalExecTime = 0.0;
     double minExecTime = std::numeric_limits<double>::max();
     double maxExecTime = 0.0;
@@ -203,11 +147,11 @@ double calculateCommCostFactor(const DAGData& dag)
     }
     
     double avgExecTime = totalExecTime / (numTasks * numVMs);
-    double granularity = avgExecTime / totalExecTime; // Lower = coarser tasks
+    double granularity = avgExecTime / totalExecTime; 
     
-    // ───────────────────────────────────────────────────────────────
-    // 2. SYSTEM HETEROGENEITY: Variance in VM speeds
-    // ───────────────────────────────────────────────────────────────
+    
+    
+    
     double avgSpeed = 0.0;
     for (const VM& vm : dag.vms) {
         avgSpeed += vm.speedFactor;
@@ -220,60 +164,60 @@ double calculateCommCostFactor(const DAGData& dag)
         speedVariance += diff * diff;
     }
     speedVariance /= numVMs;
-    double heterogeneity = std::sqrt(speedVariance) / avgSpeed; // CV of speeds
+    double heterogeneity = std::sqrt(speedVariance) / avgSpeed; 
     
-    // ───────────────────────────────────────────────────────────────
-    // 3. GRAPH DENSITY: Number of edges vs maximum possible
-    // ───────────────────────────────────────────────────────────────
+    
+    
+    
     int totalEdges = 0;
     for (const Task& t : dag.tasks) {
         totalEdges += static_cast<int>(t.successors.size());
     }
     
-    int maxPossibleEdges = (numTasks * (numTasks - 1)) / 2; // Complete graph
+    int maxPossibleEdges = (numTasks * (numTasks - 1)) / 2; 
     double density = static_cast<double>(totalEdges) / maxPossibleEdges;
     
-    // ───────────────────────────────────────────────────────────────
-    // 4. RESOURCE CONTENTION: Task-to-VM ratio
-    // ───────────────────────────────────────────────────────────────
+    
+    
+    
     double taskVmRatio = static_cast<double>(numTasks) / numVMs;
-    double contention = std::min(1.0, taskVmRatio / 5.0); // Normalized to [0,1]
+    double contention = std::min(1.0, taskVmRatio / 5.0); 
     
-    // ───────────────────────────────────────────────────────────────
-    // 5. COMBINED FACTOR CALCULATION
-    // ───────────────────────────────────────────────────────────────
-    // Communication cost factor should be:
-    //   - LOWER when tasks are coarse-grained (comm cost relatively small)
-    //   - LOWER when VM heterogeneity is low (less scheduling variance)
-    //   - LOWER when contention is high (comm cost is less relevant)
-    //   - HIGHER when graph is dense (more dependencies to consider)
     
-    // Invert granularity: finer tasks → higher factor
+    
+    
+    
+    
+    
+    
+    
+    
+    
     double fineness = 1.0 - granularity;
     
-    // Weighted combination
-   // NOTE: Contention has MULTIPLICATIVE effect to properly handle high-load scenarios
-    double baseCommCost = 0.15 +  // Base minimum
-                          0.20 * fineness +           // Fine-grained penalty
-                          0.15 * heterogeneity +      // Heterogeneity impact
-                          0.20 * density;             // Dense graphs
     
-    // MULTIPLICATIVE contention factor:
-    //   - High contention (0.8-1.0) → multiply by 0.2-0.3 (drastically reduce)
-    //   - Medium contention (0.4-0.8) → multiply by 0.5-0.7
-    //   - Low contention (0.0-0.4) → multiply by 0.8-1.0
-    double contentionFactor = std::max(0.2, 1.0 - 0.8 * contention);  // Range [0.2, 1.0]
+   
+    double baseCommCost = 0.15 +  
+                          0.20 * fineness +           
+                          0.15 * heterogeneity +      
+                          0.20 * density;             
+    
+    
+    
+    
+    
+    double contentionFactor = std::max(0.2, 1.0 - 0.8 * contention);  
     double factor = baseCommCost * contentionFactor;
     
-    // Clamp to sensible range [0.1, 0.6]
+    
     factor = std::max(0.1, std::min(0.6, factor));
     
     return factor;
 }
 
-// ============================================================
-//  VALIDATION
-// ============================================================
+
+
+
 
 bool validateDAG(const DAGData& dag)
 {
@@ -281,9 +225,9 @@ bool validateDAG(const DAGData& dag)
     const int numVMs   = static_cast<int>(dag.vms.size());
     bool valid = true;
 
-    // -------------------------------------------------------
-    // CHECK A: execTimes size == numVMs for every task
-    // -------------------------------------------------------
+    
+    
+    
     for (const Task& t : dag.tasks) {
         if (static_cast<int>(t.execTimes.size()) != numVMs) {
             std::cerr << "[INVALID] Task " << t.id
@@ -295,9 +239,9 @@ bool validateDAG(const DAGData& dag)
 
     for (const Task& task : dag.tasks) {
 
-        // -------------------------------------------------------
-        // CHECK B: No self-loops
-        // -------------------------------------------------------
+        
+        
+        
         for (int pred : task.predecessors) {
             if (pred == task.id) {
                 std::cerr << "[INVALID] Task " << task.id
@@ -313,9 +257,9 @@ bool validateDAG(const DAGData& dag)
             }
         }
 
-        // -------------------------------------------------------
-        // CHECK C: All indices are within valid range [0, numTasks)
-        // -------------------------------------------------------
+        
+        
+        
         for (int pred : task.predecessors) {
             if (pred < 0 || pred >= numTasks) {
                 std::cerr << "[INVALID] Task " << task.id
@@ -331,13 +275,13 @@ bool validateDAG(const DAGData& dag)
             }
         }
 
-        // -------------------------------------------------------
-        // CHECK D: Bidirectional consistency
-        //   If task A lists B as successor → B must list A as predecessor.
-        //   If task A lists B as predecessor → B must list A as successor.
-        // -------------------------------------------------------
+        
+        
+        
+        
+        
         for (int succ : task.successors) {
-            if (succ < 0 || succ >= numTasks) continue; // already caught above
+            if (succ < 0 || succ >= numTasks) continue; 
             const Task& succTask = dag.tasks[succ];
             bool found = std::find(succTask.predecessors.begin(),
                                    succTask.predecessors.end(),
@@ -366,12 +310,12 @@ bool validateDAG(const DAGData& dag)
             }
         }
 
-        // -------------------------------------------------------
-        // CHECK E: Acyclic property (reverse-edge check)
-        //   For any edge i→j, we require j > i.
-        //   Equivalently: for task i, all successors must have id > i.
-        //                             all predecessors must have id < i.
-        // -------------------------------------------------------
+        
+        
+        
+        
+        
+        
         for (int succ : task.successors) {
             if (succ >= 0 && succ <= task.id) {
                 std::cerr << "[INVALID] Reverse edge detected: Task "
@@ -389,9 +333,9 @@ bool validateDAG(const DAGData& dag)
             }
         }
 
-        // -------------------------------------------------------
-        // CHECK H: No duplicate edges
-        // -------------------------------------------------------
+        
+        
+        
         {
             std::set<int> predSet(task.predecessors.begin(),
                                   task.predecessors.end());
@@ -411,9 +355,9 @@ bool validateDAG(const DAGData& dag)
         }
     }
 
-    // -------------------------------------------------------
-    // CHECK F: At least one entry node (no predecessors)
-    // -------------------------------------------------------
+    
+    
+    
     bool hasEntry = false;
     for (const Task& t : dag.tasks) {
         if (t.predecessors.empty()) { hasEntry = true; break; }
@@ -423,9 +367,9 @@ bool validateDAG(const DAGData& dag)
         valid = false;
     }
 
-    // -------------------------------------------------------
-    // CHECK G: At least one exit node (no successors)
-    // -------------------------------------------------------
+    
+    
+    
     bool hasExit = false;
     for (const Task& t : dag.tasks) {
         if (t.successors.empty()) { hasExit = true; break; }
@@ -438,13 +382,11 @@ bool validateDAG(const DAGData& dag)
     return valid;
 }
 
-// ============================================================
-//  PRINT
-// ============================================================
 
-/**
- * Helper: formats a vector<int> as "[ a b c ]" or "[ none ]" if empty.
- */
+
+
+
+ 
 static std::string formatIntList(const std::vector<int>& v)
 {
     if (v.empty()) return "[ none ]";
@@ -461,9 +403,9 @@ void printDAG(const DAGData& dag)
 {
     const std::string line(60, '-');
 
-    // -------------------------------------------------------
-    // Print VMs
-    // -------------------------------------------------------
+    
+    
+    
     std::cout << "\n" << line << "\n";
     std::cout << "  VIRTUAL MACHINES (" << dag.vms.size() << " total)\n";
     std::cout << line << "\n";
@@ -474,9 +416,9 @@ void printDAG(const DAGData& dag)
                   << "  |  speedFactor = " << vm.speedFactor << "\n";
     }
 
-    // -------------------------------------------------------
-    // Print Tasks
-    // -------------------------------------------------------
+    
+    
+    
     std::cout << "\n" << line << "\n";
     std::cout << "  TASKS (" << dag.tasks.size() << " total)\n";
     std::cout << line << "\n";
