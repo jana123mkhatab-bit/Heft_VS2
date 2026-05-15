@@ -83,9 +83,9 @@ int main()
     bool ok = validateDAG(dag);
 
     if (ok) {
-        std::cout << "\n  \xE2\x9C\x94 DAG VALID  --  All structural checks passed.\n\n";
+        std::cout << "\n  DAG VALID  --  All structural checks passed.\n\n";
     } else {
-        std::cout << "\n  \xE2\x9C\x98 DAG INVALID  --  One or more checks failed (see above).\n\n";
+        std::cout << "\n  DAG INVALID  --  One or more checks failed (see above).\n\n";
     }
 
     
@@ -111,33 +111,34 @@ int main()
     std::cout << "  Communication Cost Factor (dynamically calculated): "
               << std::fixed << std::setprecision(4)
               << dag.commCostFactor << "\n";
-    std::cout << "  (Higher factor → communication cost is more significant)\n";
+    std::cout << "  (Higher factor communication cost is more significant)\n";
     std::cout << "\n";
 
     
     
     
-  printBanner("STEP 4 HEFT Scheduling (Greedy)");
+    printBanner("STEP 4 HEFT Scheduling (Greedy)");
     AlgorithmResult heftResult = heft_schedule(dag);
     printAlgorithmResult(heftResult);
 
     
     
     
-    printBanner("STEP LookAhead Heft Scheduling");
+    
+    printBanner("STEP 5 LookAhead Heft Scheduling");
     AlgorithmResult dpResult = dp_heft(dag);
     printAlgorithmResult(dpResult);
 
     
 
 
-    printBanner("STEP 6 – edp_heft (Enhanced DP HEFT)");
+    printBanner("STEP 6 edp_heft (Enhanced DP HEFT)");
     AlgorithmResult edpResult = edp_heft(dag);
     printAlgorithmResult(edpResult);
 
     
     
-    printBanner("STEP 7 – Divide & Conquer Scheduling");
+    printBanner("STEP 7 Divide & Conquer Scheduling");
     AlgorithmResult dacResult = dac_schedule(dag);
     printAlgorithmResult(dacResult);
 
@@ -152,7 +153,7 @@ int main()
     
     
     
-    printBanner("ALGORITHM COMPARISON – PERFORMANCE RESULTS");
+    printBanner("ALGORITHM COMPARISON PERFORMANCE RESULTS");
 
     // Part: Comparison Table
 
@@ -190,7 +191,7 @@ int main()
     std::cout << std::fixed << std::setprecision(2);
 
     for (size_t i = 0; i < results.size(); ++i) {
-        std::string rank = (i == 0) ? " ✓ BEST" : "";
+        std::string rank = (i == 0) ? " BEST" : "";
         std::cout << "  " << std::left << std::setw(35) << results[i].name
                   << std::right << std::setw(20) << results[i].makespan
                   << std::right << std::setw(20) << results[i].runtime
