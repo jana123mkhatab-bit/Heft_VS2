@@ -128,10 +128,12 @@ int main()
     std::cout << "  Total edges  : " << totalEdges        << "\n";
     std::cout << "  Entry nodes  : " << entryNodes        << "\n";
     std::cout << "  Exit  nodes  : " << exitNodes         << "\n";
-    /*std::cout << "  commCostFactor (CCR) : " << std::fixed << std::setprecision(4)
-              << dag.commCostFactor
-              << "  (set this same value in Qt UI to reproduce results)\n";
-    std::cout << "\n";*/
+    std::cout << "  \n";
+    std::cout << "  Communication Cost Factor (dynamically calculated): "
+              << std::fixed << std::setprecision(4)
+              << dag.commCostFactor << "\n";
+    std::cout << "  (Higher factor → communication cost is more significant)\n";
+    std::cout << "\n";
 
     // -------------------------------------------------------
     // Step 4 – Run greedy HEFT scheduling

@@ -32,7 +32,6 @@
 using namespace std;
 
 static constexpr double merge_INF = numeric_limits<double>::max() / 2.0;
-static constexpr double COMM_FACTOR = 0.3;
 
 // ════════════════════════════════════════════════════════════════════════════
 //  SECTION 1 — COST AND RANK HELPERS
@@ -50,7 +49,7 @@ static double merge_commCost(const DAGData& dag, int predTask, int predVm,
                            int succVm)
 {
     if (predVm == succVm) return 0.0;
-    return COMM_FACTOR * merge_avgExec(dag, predTask);
+    return dag.commCostFactor * merge_avgExec(dag, predTask);
 }
 
 static vector<double> merge_upwardRank(const DAGData& dag)

@@ -1,0 +1,148 @@
+================================================================================
+ALGORITHM WIN CONDITIONS BY TASK-TO-VM RATIO
+================================================================================
+
+Three scheduling algorithms in this project:
+  1. GREEDY HEFT      - Simple, fast, low overhead
+  2. DP HEFT (Look-Ahead) - 2-task look-ahead, moderate exploration  
+  3. EDP HEFT         - Full dynamic programming, exhaustive search
+
+================================================================================
+ALGORITHM CHARACTERISTICS
+================================================================================
+
+GREEDY HEFT (heft.cpp):
+  - Computes upward rank once for all tasks
+  - Sorts tasks by rank (descending)
+  - For each task in order: pick VM with minimum EFT (earliest finish time)
+  - Time complexity: O(n²) or O(n*m) depending on implementation
+  - Overhead: MINIMAL
+  - Quality: GOOD HEURISTIC but can miss optimal placements
+  
+DP HEFT / Look-Ahead (dp.cpp):
+  - Uses upward rank like HEFT
+  - When scheduling task T, looks TWO tasks ahead
+  - Explores which of the next 2 tasks could conflict/interact  
+  - Makes smarter VM choice based on predicted scheduling of next tasks
+  - Time complexity: O(n * m * k²) where k = look-ahead window (≈2)
+  - Overhead: MODERATE
+  - Quality: BETTER than greedy for medium-sized DAGs
+
+EDP HEFT / Enhanced DP (Edp.cpp):
+  - Uses bilateral rank (upward + downward ranks)
+  - Full dynamic programming during VM assignment
+  - Explores more task orderings and VM placements
+  - Reconstructs and replays schedule in Phase 3 for final verification
+  - Time complexity: O(n² * m) or worse (depends on DP state space)
+  - Overhead: HIGH
+  - Quality: BEST for well-structured DAGs with complex dependencies
+
+================================================================================
+RATIO ANALYSIS & WHEN EACH WINS
+================================================================================
+
+1. MANY TASKS, FEW VMs (HIGH CONTENTION)
+   Example: 40 tasks : 4 VMs (10:1 ratio)
+   
+   WINNER: GREEDY HEFT
+   
+   Why:
+   - Heavy VM contention means most tasks will have few good placement options
+   - With few VMs, the "VM ready time" is the main scheduling constraint
+   - Greedy EFT selection works well because it naturally spreads load
+   - Look-ahead and DP overhead NOT justified—few good options anyway
+   - Simple upward rank captures priority well in high-contention regime
+   - Communication costs become secondary (VMs are already busy)
+   - Example: Task T at time 100 can go on VM0 (ready@150) or VM1 (ready@200)
+     → Pick VM0 regardless. No complex decisions needed.
+
+2. BALANCED TASKS & VMs (MODERATE RATIO)  
+   Example: 20 tasks : 10 VMs (2:1 ratio) OR 40 tasks : 10 VMs (4:1 ratio)
+   
+   WINNER: DP HEFT (Look-Ahead)
+   
+   Why:
+   - Enough VMs provide placement flexibility
+   - But not so many that greedy works trivially
+   - Look-ahead helps resolve "which VM" decisions by considering next 2 tasks
+   - Task T can go on VM5 (EFT=100) vs VM7 (EFT=101)
+   - Look-ahead predicts: "If T→VM5, then T's successor S must go→VM2 (cost=5)"
+     vs "If T→VM7, then S can stay on VM7 (cost=0)"
+   - 2-task look-ahead is SWEET SPOT: captures local interactions without explosion
+   - DP overhead is proportional to k² (k=2) = manageable
+   - Example win: Saves ~5-10% makespan vs greedy in moderate cases
+
+3. FEW TASKS, MANY VMs (LOW CONTENTION / ABUNDANT RESOURCES)
+   Example: 8 tasks : 20 VMs (1:2.5 ratio) OR 5 tasks : 10 VMs (1:2 ratio)
+   
+   WINNER: EDP HEFT (Full DP)
+   
+   Why:
+   - Many VMs means many "good enough" placements for each task
+   - Most tasks can complete without contention bottleneck
+   - Decision quality matters: placing task T on VM3 vs VM7 changes downstream
+   - Bilateral rank (upward + downward) captures critical task properties
+   - Full DP explores permutations without combinatorial explosion
+   - Communication costs become CRITICAL:
+     - Task T (exec=10) with successor S:
+       - If on same VM: cost = 0
+       - If different: cost = 0.3 * 10 = 3
+       - With many VMs, scheduler can afford to put T,S on same VM
+   - EDP's exhaustive search finds these optimizations
+   - No VM shortage = overhead is justified by better quality
+   - Example: Saves ~15-20% vs greedy when exploration space is large
+
+================================================================================
+EMPIRICAL PATTERNS (EXPECTED FROM RUNS)
+================================================================================
+
+Task:VM Ratio     |  Best Algorithm    |  Why                           | Expected Speedup vs Greedy
+─────────────────────────────────────────────────────────────────────────────────────────────────
+10:1 or higher    |  GREEDY HEFT       |  Heavy contention, few options |  ~0-3% (near optimal already)
+4:1               |  DP HEFT           |  Sweet spot for look-ahead     |  ~5-12% vs greedy
+2:1               |  DP HEFT or EDP    |  Transition zone, depends on DAG | ~8-15% vs greedy
+1:1               |  EDP (slight edge)  |  More exploration needed       | ~10-18% vs greedy
+1:2 or lower      |  EDP HEFT          |  Abundant resources, quality matters | ~12-25% vs greedy
+
+================================================================================
+KEY INSIGHT: EXPLORATION VS. CONTENTION TRADE-OFF
+================================================================================
+
+GREEDY HEFT wins when:
+  → VMs are scarce (contention-bound)
+  → Most decisions are "forced" (limited options)
+  → Overhead of exploration > potential gain from better placement
+
+DP HEFT wins when:
+  → Moderate resources (some flexibility)
+  → Local interactions matter (2-task dependencies)
+  → Sweet spot between exploration cost and benefit
+
+EDP HEFT wins when:
+  → Resources are abundant (exploration possible)
+  → Many valid placements (decision quality matters)
+  → Communication costs are significant
+  → DAG structure is complex (bilateral rank helps)
+
+================================================================================
+COMMUNICATION COST FACTOR IMPACT
+================================================================================
+
+Current: commCostFactor = 0.3 (hardcoded in HEFT)
+Request: Make it DYNAMIC
+
+For dynamic calculation, consider:
+  1. Task granularity: avg_exec_time / total_work
+  2. System heterogeneity: std_dev(speedFactor) or max/min ratio
+  3. Graph density: edges / max_possible_edges
+  
+Suggested formula:
+  - If tasks are SMALL (fine-grained) → LOW communication cost relative to exec
+    → commCostFactor = 0.1-0.2
+    → Greedy wins more often (communication overhead negligible)
+  
+  - If tasks are LARGE (coarse-grained) → HIGH communication cost relative to exec
+    → commCostFactor = 0.4-0.6
+    → EDP wins more often (communication optimization critical)
+
+================================================================================

@@ -47,7 +47,7 @@ static constexpr double INF = numeric_limits<double>::max();
  * when they run on DIFFERENT VMs. Returns 0 if same VM.
  *
  * Cost model: average execution time of the predecessor task,
- * scaled by a fixed communication factor (0.3 — tunable).
+ * scaled by the dynamically calculated communication factor.
  */
 static double commCost(const DAGData& dag, int predTask, int predVm,
                        int /*succTask*/, int succVm)
@@ -59,9 +59,8 @@ static double commCost(const DAGData& dag, int predTask, int predVm,
     for (double v : et) avg += v;
     avg /= static_cast<double>(et.size());
 
-    // Communication factor: how expensive data transfer is relative to compute.
-    constexpr double COMM_FACTOR = 0.3;
-    return COMM_FACTOR * avg;
+    // Use dynamically calculated communication cost factor
+    return dag.commCostFactor * avg;
 }
 
 /**

@@ -20,8 +20,7 @@ static double dac_commCost(const DAGData& dag,
     double avg = accumulate(et.begin(), et.end(), 0.0);
     avg /= static_cast<double>(et.size());
 
-    constexpr double COMM_FACTOR = 0.3;
-    return COMM_FACTOR * avg;
+    return dag.commCostFactor * avg;
 }
 
 AlgorithmResult dac_schedule(const DAGData& dag) {

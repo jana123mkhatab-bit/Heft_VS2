@@ -39,8 +39,7 @@ static double avgExecTime(const DAGData& dag, int taskId)
 static double commCost(const DAGData& dag, int predTask, int predVm, int succVm)
 {
 	if (predVm == succVm) return 0.0;
-	constexpr double COMM_FACTOR = 0.3;
-	return COMM_FACTOR * avgExecTime(dag, predTask);
+	return dag.commCostFactor * avgExecTime(dag, predTask);
 }
 
 // Upward rank: rank_u(t) = avgExec(t) + max_s (comm(t,s) + rank_u(s))
