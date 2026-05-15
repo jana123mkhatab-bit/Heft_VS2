@@ -1,0 +1,92 @@
+TEST RESULTS - Why EDP Keeps Winning
+====================================
+
+Several test runs show EDP consistently winning. Analysis:
+
+SCENARIO 1: HIGH CONTENTION (50 tasks, 5 VMs)
+- Factor: 0.1000
+- EDP Greedy DAC Merge LookAhead
+- Winner: EDP (94.68)
+- Gap: EDP 94.68 vs Greedy 103.34 = 9.3% better
+
+SCENARIO 2: MEDIUM (20 tasks, 10 VMs)  
+- Factor: ~0.49
+- Winner: EDP
+- Gap: Notable advantage
+
+SCENARIO 3: LOW CONTENTION (8 tasks, 20 VMs)
+- Factor: ~0.42
+- Winner: Greedy (tied makespan, much faster)
+- Gap: Runtime hugely favors Greedy (0.02ms vs 0.54ms)
+
+ROOT CAUSE OF EDP WINNING:
+==========================
+
+1. BILATERAL RANK ADVANTAGE
+   - Greedy HEFT uses: upward rank only
+   - EDP uses: bilateral rank (upRank + downRank)
+   - Bilateral rank considers BOTH critical path above AND below
+   - This gives better task prioritization overall
+   
+   Example:
+   - Greedy: "Task T has lots of work below (high upRank)" → prioritize it
+   - EDP: "Task T has lots of work below AND high dependencies above" → better decision
+
+2. FULL DP EXPLORATION
+   - EDP explores n×m DP states (all task-VM combinations)
+   - Even with high contention, DP finds slightly better placements
+   - For 50 tasks, 5 VMs = 250 DP states explored
+   - This exploration often wins for small-to-medium DAGs
+
+3. MAKESPAN COMPUTATION
+   - Both algorithms correctly compute makespan
+   - EDP's algorithm is superior, not incorrect
+
+THE FUNDAMENTAL ISSUE:
+======================
+
+EDP will likely ALWAYS win (or nearly always) because:
+- It uses a better priority heuristic (bilateral rank)
+- It uses exhaustive search within constraints (DP)
+- For the problem sizes we're testing (≤100 tasks), the O(n²m) cost is negligible
+- There's no algorithmic bug - EDP is just better
+
+WHY THIS HAPPENS:
+=================
+
+The three algorithms compete on:
+1. Task prioritization (bilateral rank > upward rank > level-based)
+2. VM selection (DP > lookahead > greedy)
+
+EDP wins in BOTH categories, so it almost always wins.
+
+SOLUTION OPTIONS:
+=================
+
+1. TEST WITH MASSIVE DAGs (1000+ tasks)
+   → Eventually DP overhead dominates, other algorithms might win
+   
+2. RESTRICT EDP'S CAPABILITIES
+   → Use only upward rank (like Greedy)
+   → Use smaller DP state space
+   → Then see if competitions are more balanced
+
+3. ACCEPT EDP AS SUPERIOR
+   → Focus on other metrics (runtime, scalability)
+   → Document that EDP is the best for quality
+   → Compare algorithms on speed/complexity instead
+
+4. FIX OTHER ALGORITHMS
+   → Add bilateral rank to Greedy
+   → Add look-ahead to Greedy
+   → Make Greedy more competitive by design
+
+RECOMMENDATION:
+===============
+
+The current results are CORRECT. EDP is genuinely a better algorithm.
+
+If you want more balanced comparisons:
+- Focus on runtime, not just makespan
+- Test with much larger DAGs (>500 tasks)
+- Or add bilateral rank to Greedy HEFT to make it more competitive

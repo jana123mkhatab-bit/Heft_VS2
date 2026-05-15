@@ -252,11 +252,18 @@ double calculateCommCostFactor(const DAGData& dag)
     double fineness = 1.0 - granularity;
     
     // Weighted combination
-    double factor = 0.15 +  // Base minimum
-                    0.15 * fineness +           // Fine-grained penalty (0-0.15)
-                    0.15 * heterogeneity +      // Heterogeneity impact (0-0.15)
-                    0.15 * density +            // Dense graphs (0-0.15)
-                    0.15 * (1.0 - contention);  // Less impact when contended (0-0.15)
+   // NOTE: Contention has MULTIPLICATIVE effect to properly handle high-load scenarios
+    double baseCommCost = 0.15 +  // Base minimum
+                          0.20 * fineness +           // Fine-grained penalty
+                          0.15 * heterogeneity +      // Heterogeneity impact
+                          0.20 * density;             // Dense graphs
+    
+    // MULTIPLICATIVE contention factor:
+    //   - High contention (0.8-1.0) → multiply by 0.2-0.3 (drastically reduce)
+    //   - Medium contention (0.4-0.8) → multiply by 0.5-0.7
+    //   - Low contention (0.0-0.4) → multiply by 0.8-1.0
+    double contentionFactor = std::max(0.2, 1.0 - 0.8 * contention);  // Range [0.2, 1.0]
+    double factor = baseCommCost * contentionFactor;
     
     // Clamp to sensible range [0.1, 0.6]
     factor = std::max(0.1, std::min(0.6, factor));

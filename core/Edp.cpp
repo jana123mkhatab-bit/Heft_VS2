@@ -164,7 +164,6 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
             for (int v = 0; v < m; ++v) {
                 double est = 0.0;
                 double eft = edp_computeEFT(dag, tid, v, parentSnap, est);
-                //double newMakespan = max(dp[i-1][prev_v], eft);
 
                 double newMakespan = *max_element(parentSnap.vmReady.begin(),
                                               parentSnap.vmReady.end());
@@ -173,6 +172,7 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
                 if (newMakespan < dp[i][v]) {
                     dp[i][v]     = newMakespan;
                     parent[i][v] = prev_v;
+                    // IMPORTANT: Copy parent snapshot and update ONLY the current task/VM
                     snaps[i][v]              = parentSnap;
                     snaps[i][v].vmReady[v]   = eft;
                     snaps[i][v].taskFinish[tid] = eft;
