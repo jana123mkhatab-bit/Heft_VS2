@@ -52,7 +52,7 @@ int main()
     // -------------------------------------------------------
     // Header
     // -------------------------------------------------------
-    printBanner("DAG TASK SCHEDULING GENERATOR  |  Pure C++  |  No Qt");
+    printBanner("DAG TASK SCHEDULING GENERATOR  ");
 
     // -------------------------------------------------------
     // User Input – Number of Tasks and VMs

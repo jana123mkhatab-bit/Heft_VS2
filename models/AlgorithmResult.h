@@ -18,6 +18,8 @@
 
 #include <vector>
 #include <string>
+#include <iostream>
+#include <iomanip>
 
 // ============================================================
 //  ScheduleEntry
@@ -37,8 +39,8 @@ struct ScheduleEntry {
 // ============================================================
 
 struct AlgorithmResult {
-    std::string              algorithmName; ///< Human-readable algorithm label.
-    std::string              algorithmDesc; ///< Short description of the strategy.
+    std::string algorithmName; ///< Human-readable algorithm label.
+    std::string algorithmDesc; ///< Short description of the strategy.
     std::vector<ScheduleEntry> entries;     ///< One entry per scheduled task.
     double makespan   = 0.0;               ///< Max finish time across all tasks.
     double runtimeMs  = 0.0;               ///< Wall-clock time to compute schedule (ms).
@@ -54,4 +56,40 @@ struct AlgorithmResult {
  */
 
 
-void printAlgorithmResult(const AlgorithmResult& result);
+
+// ============================================================
+//  PUBLIC: printAlgorithmResult (for DP results)
+// ============================================================
+
+void printAlgorithmResult(const AlgorithmResult& result)
+{
+    const std::string border(60, '=');
+    std::cout << "\n" << border << "\n";
+    std::cout << "  " << result.algorithmName << "\n";
+    std::cout << border << "\n\n";
+
+    // Sort entries by task ID for clean display
+    std::vector<ScheduleEntry> sorted = result.entries;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const ScheduleEntry& a, const ScheduleEntry& b){
+                  return a.taskId < b.taskId;
+              });
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "  " << std::setw(8) << "Task"
+              << std::setw(8) << "VM"
+              << std::setw(12) << "Start"
+              << std::setw(12) << "Finish" << "\n";
+    std::cout << "  " << std::string(40, '-') << "\n";
+
+    for (const ScheduleEntry& se : sorted) {
+        std::cout << "  "
+                  << std::setw(8) << se.taskId
+                  << std::setw(8) << se.vmId
+                  << std::setw(12) << se.startTime
+                  << std::setw(12) << se.finishTime << "\n";
+    }
+
+    std::cout << "\n  Makespan : " << result.makespan << "\n";
+    std::cout << border << "\n\n";
+}
