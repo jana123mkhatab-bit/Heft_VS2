@@ -209,16 +209,17 @@ static void commitTask(ScheduleState& st, int taskId, int vmId,
     st.scheduled[taskId]  = {taskId, vmId, est, eft};
 }
 
-// --- Strategy A: D&C-style greedy for highly parallel levels ---
-static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
-                              ScheduleState& st)
+// --- Strategy A: HEFT-style greedy for large/fast scheduling (replaces D&C) ---
+static void scheduleLevel_HEFT(const DAGData& dag, const vector<int>& tasks,
+                               const vector<double>& upRank, ScheduleState& st)
 {
     int m = static_cast<int>(dag.vms.size());
 
-    // Sort tasks by descending average exec time (heavy first)
+    // Sort tasks by descending upward rank (HEFT priority)
     vector<int> sorted = tasks;
     sort(sorted.begin(), sorted.end(), [&](int a, int b) {
-        return merge_avgExec(dag, a) > merge_avgExec(dag, b);
+        if (upRank[a] != upRank[b]) return upRank[a] > upRank[b];
+        return a < b;
     });
 
     for (int tid : sorted) {
@@ -229,10 +230,16 @@ static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
         for (int v = 0; v < m; ++v) {
             double est = 0.0;
             double eft = merge_computeEFT(dag, tid, v, st, est);
-            if (eft < bestEFT) {
-                bestEFT = eft;
+
+            bool better = (eft < bestEFT);
+            if (!better && std::fabs(eft - bestEFT) < 1e-9) {
+                better = (est < bestEST) || (std::fabs(est - bestEST) < 1e-9 && v < bestVM);
+            }
+
+            if (better) {
                 bestVM  = v;
                 bestEST = est;
+                bestEFT = eft;
             }
         }
         commitTask(st, tid, bestVM, bestEST, bestEFT);
@@ -374,7 +381,7 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
 //  SECTION 5 — ADAPTIVE LEVEL CLASSIFICATION
 // ════════════════════════════════════════════════════════════════════════════
 
-enum class LevelStrategy { DAC, DP_LOOKAHEAD, EDP_GLOBAL };
+enum class LevelStrategy { HEFT, DP_LOOKAHEAD, EDP_GLOBAL };
 
 static LevelStrategy classifyLevel(const DAGData& dag,
                                    const vector<int>& level,
@@ -383,12 +390,18 @@ static LevelStrategy classifyLevel(const DAGData& dag,
 {
     int m = static_cast<int>(dag.vms.size());
     int width = static_cast<int>(level.size());
+    int totalTasks = static_cast<int>(dag.tasks.size());
 
-    // Highly parallel level: width > 2 * numVMs → D&C is fastest
-    if (width > 2 * m)
-        return LevelStrategy::DAC;
+    // Adaptive rules (ordered by preference):
+    // 1) HEFT when tasks >> VMs (scale and speed)
+    if (totalTasks >= 4 * m)
+        return LevelStrategy::HEFT;
 
-    // Check if any task in this level is on the critical path
+    // 2) DP+HEFT hybrid for balanced workloads (approx 2x tasks per VM)
+    if (totalTasks >= 2 * m)
+        return LevelStrategy::DP_LOOKAHEAD;
+
+    // 3) EDP for crucial small/high-priority levels (critical path heavy)
     double critThreshold = profile.criticalPathLen * 0.6;
     bool hasCritical = false;
     for (int tid : level) {
@@ -397,13 +410,10 @@ static LevelStrategy classifyLevel(const DAGData& dag,
             break;
         }
     }
-
-    // Critical-path tasks: use EDP global DP for optimal assignment
-    // But only if level is small enough for the O(k*m^2) DP to be practical
     if (hasCritical && width <= 3 * m)
         return LevelStrategy::EDP_GLOBAL;
 
-    // Medium levels: DP look-ahead balances quality and speed
+    // Default: DP look-ahead offers a good balance
     return LevelStrategy::DP_LOOKAHEAD;
 }
 
@@ -685,16 +695,16 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     st.taskFinish.assign(n, 0.0);
     st.taskVm.assign(n, -1);
 
-    // Try two different scheduling approaches and pick the better one
+    // Adaptive per-level scheduling (single pass). EDP is only used as a
+    // targeted option for critical levels; we removed the aggressive global
+    // EDP fallback to avoid forcing global assignments.
     ScheduleState stAdaptive = st;
-    ScheduleState stGlobal = st;
-    
-    // Approach 1: Adaptive per-level (original)
+
     for (const auto& level : levels) {
         LevelStrategy strategy = classifyLevel(dag, level, upRank, profile);
         switch (strategy) {
-            case LevelStrategy::DAC:
-                scheduleLevel_DaC(dag, level, stAdaptive);
+            case LevelStrategy::HEFT:
+                scheduleLevel_HEFT(dag, level, upRank, stAdaptive);
                 break;
             case LevelStrategy::DP_LOOKAHEAD:
                 scheduleLevel_DP(dag, level, biRank, stAdaptive);
@@ -704,19 +714,9 @@ AlgorithmResult merge_schedule(const DAGData& dag)
                 break;
         }
     }
-    
-    // Approach 2: Global EDP on all tasks (more aggressive)
-    // vector<int> allTasks(n);
-    // iota(allTasks.begin(), allTasks.end(), 0);
-    // sort(allTasks.begin(), allTasks.end(), [&](int a, int b) {
-    //     return biRank[a] > biRank[b];
-    // });
-    // scheduleLevel_EDP(dag, allTasks, biRank, stGlobal);
 
-    // Choose the better initial schedule
-    double makespanAdaptive = computeMakespan(stAdaptive, n);
-    double makespanGlobal = computeMakespan(stGlobal, n);
-    st = (makespanGlobal < makespanAdaptive) ? stGlobal : stAdaptive;
+    // Use the adaptive schedule as the starting point; do not force global EDP
+    st = stAdaptive;
 
     // ── Phase 3: Global Refinement ───────────────────────────────────────────
     globalRefinement(dag, st, upRank, 5);
@@ -724,7 +724,7 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     // ── Build AlgorithmResult ────────────────────────────────────────────────
     AlgorithmResult result;
     result.algorithmName = "Optimization Algorithm (OP)";
-    result.algorithmDesc = "Adaptive hybrid: D&C + DP look-ahead + EDP global DP | Refinement pass";
+    result.algorithmDesc = "Adaptive hybrid: HEFT + DP look-ahead + EDP global DP | Refinement pass";
     result.isValid       = true;
     result.makespan      = computeMakespan(st, n);
 
