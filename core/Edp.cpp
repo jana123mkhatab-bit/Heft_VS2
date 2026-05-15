@@ -42,7 +42,7 @@ static double edp_avgExec(const DAGData& dag, int taskId)
     const vector<double>& et = dag.tasks[taskId].execTimes;
     double sum = 0.0;
     for (double t : et) sum += t;
-    return sum /(double)(et.size());
+    return sum / static_cast<double>(et.size());
 }
 
 static double edp_commCost(const DAGData& dag,
@@ -56,10 +56,10 @@ static double edp_commCost(const DAGData& dag,
 // ════════════════════════════════════════════════════════════════════════════
 //  SECTION 2 — BILATERAL RANK
 // ════════════════════════════════════════════════════════════════════════════
-/*static vector<double> edp_upwardRank(const DAGData& dag)
 
+static vector<double> edp_upwardRank(const DAGData& dag)
 {
-    int n = (int)(dag.tasks.size());
+    int n = static_cast<int>(dag.tasks.size());
     vector<double> rank(n, -1.0);
 
     function<double(int)> calc = [&](int id) -> double {
@@ -74,42 +74,8 @@ static double edp_commCost(const DAGData& dag,
 
     for (int i = 0; i < n; ++i) calc(i);
     return rank;
-}*/
-
-
-static double calcUpRank(const DAGData& dag,vector<double>& rank,int id){
-    // DP memoization check
-    if (rank[id] >= 0.0)
-        return rank[id];
-
-    double best = 0.0;
-
-    // Explore all successors
-    for (int succ : dag.tasks[id].successors)
-    {
-        double cc = edp_commCost(dag, id, 0, succ, 1);
-
-        double futureCost = cc + calcUpRank(dag, rank, succ);
-
-        best = std::max(best, futureCost);
-    }
-
-    // Upward rank formula
-    rank[id] = edp_avgExec(dag, id) + best;
-
-    return rank[id];
 }
 
-static vector<double> edp_upwardRank(const DAGData& dag)
-{
-    int n = static_cast<int>(dag.tasks.size());
-    vector<double> rank(n, -1.0);
-
-    for (int i = 0; i < n; ++i)
-        calcUpRank(dag, rank, i);
-
-    return rank;
-}
 static vector<double> edp_downwardRank(const DAGData& dag)
 {
     int n = static_cast<int>(dag.tasks.size());

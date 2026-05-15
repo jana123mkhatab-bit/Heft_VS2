@@ -260,3 +260,40 @@ AlgorithmResult dp_heft(const DAGData& dag)
     result.runtimeMs = runtimeMs;
     return result;
 }
+
+// ============================================================
+//  PUBLIC: printAlgorithmResult (for DP results)
+// ============================================================
+
+void printAlgorithmResult(const AlgorithmResult& result)
+{
+    const std::string border(60, '=');
+    std::cout << "\n" << border << "\n";
+    std::cout << "  " << result.algorithmName << "\n";
+    std::cout << border << "\n\n";
+
+    // Sort entries by task ID for clean display
+    std::vector<ScheduleEntry> sorted = result.entries;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const ScheduleEntry& a, const ScheduleEntry& b){
+                  return a.taskId < b.taskId;
+              });
+
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "  " << std::setw(8) << "Task"
+              << std::setw(8) << "VM"
+              << std::setw(12) << "Start"
+              << std::setw(12) << "Finish" << "\n";
+    std::cout << "  " << std::string(40, '-') << "\n";
+
+    for (const ScheduleEntry& se : sorted) {
+        std::cout << "  "
+                  << std::setw(8) << se.taskId
+                  << std::setw(8) << se.vmId
+                  << std::setw(12) << se.startTime
+                  << std::setw(12) << se.finishTime << "\n";
+    }
+
+    std::cout << "\n  Makespan : " << result.makespan << "\n";
+    std::cout << border << "\n\n";
+}

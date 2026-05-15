@@ -13,7 +13,7 @@
  * Algorithm flow:
  *   Phase 1 — Graph Analysis:   classify DAG depth, density, critical path
  *   Phase 2 — Adaptive Scheduling: per-level strategy selection (D&C / DP / EDP)
- *   Phase 3 — Global Refinement:  bottleneck detection + task migration
+ *   (No global refinement post-processing is applied.)
  *
  * Result type is the global AlgorithmResult (from AlgorithmResult.h).
  *

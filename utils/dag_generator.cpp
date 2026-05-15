@@ -122,7 +122,7 @@ static void generateTasks(std::vector<Task>& tasks, int numTasks,
 static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
 {
     const int numTasks = static_cast<int>(tasks.size());
-    if (numTasks < 2) return; // Nothing to connect
+    if (numTasks < 2) return; 
 
     std::uniform_real_distribution<double> probDist(0.0, 1.0);
 

@@ -121,20 +121,16 @@ static vector<vector<int>> merge_computeLevels(const DAGData& dag)
     return levels;
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  SECTION 3 — GRAPH ANALYSIS (Phase 1)
-// ════════════════════════════════════════════════════════════════════════════
-
 struct DAGProfile {
     int    numLevels;
     double avgLevelWidth;
     double maxLevelWidth;
     int    totalEdges;
-    double density;          // edges / max_possible_edges
-    double criticalPathLen;  // sum of avg exec times along critical path
-    bool   isDeep;           // more levels than average width
-    bool   isDense;          // density > 0.3
-    int    parallelBranches; // count of levels with width > numVMs
+    double density;
+    double criticalPathLen;
+    bool   isDeep;
+    bool   isDense;
+    int    parallelBranches;
 };
 
 static DAGProfile analyzeDAG(const DAGData& dag,
@@ -231,6 +227,84 @@ static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
             if (eft < bestEFT) {
                 bestEFT = eft;
                 bestVM  = v;
+                bestEST = est;
+            }
+        }
+        commitTask(st, tid, bestVM, bestEST, bestEFT);
+    }
+}
+
+// --- Strategy X: Greedy Min-Min for levels with uniform or moderate tasks ---
+static void scheduleLevel_MinMin(const DAGData& dag, const vector<int>& tasks,
+                                 ScheduleState& st)
+{
+    int m = static_cast<int>(dag.vms.size());
+    if (tasks.empty()) return;
+
+    // Remaining tasks set
+    vector<int> remaining = tasks;
+
+    while (!remaining.empty()) {
+        // For each task, find its best VM (min EFT)
+        double bestGlobalEFT = merge_INF;
+        int bestTaskIdx = 0;
+        int bestTaskId = remaining[0];
+        int bestTaskVM = 0;
+
+        for (size_t ri = 0; ri < remaining.size(); ++ri) {
+            int tid = remaining[ri];
+            double bestEFT = merge_INF;
+            int    bestVM  = 0;
+
+            for (int v = 0; v < m; ++v) {
+                double est = 0.0;
+                double eft = merge_computeEFT(dag, tid, v, st, est);
+                if (eft < bestEFT) {
+                    bestEFT = eft;
+                    bestVM  = v;
+                }
+            }
+
+            if (bestEFT < bestGlobalEFT) {
+                bestGlobalEFT = bestEFT;
+                bestTaskIdx = static_cast<int>(ri);
+                bestTaskId = tid;
+                bestTaskVM = bestVM;
+            }
+        }
+
+        // Commit the chosen task
+        double est = 0.0;
+        double eft = merge_computeEFT(dag, bestTaskId, bestTaskVM, st, est);
+        commitTask(st, bestTaskId, bestTaskVM, est, eft);
+
+        // Remove assigned task from remaining
+        remaining.erase(remaining.begin() + bestTaskIdx);
+    }
+}
+
+// --- Strategy Y: HEFT per-level (upward-rank priority) ---
+static void scheduleLevel_HEFT(const DAGData& dag, const vector<int>& tasks,
+                               const vector<double>& upRank, ScheduleState& st)
+{
+    int m = static_cast<int>(dag.vms.size());
+    vector<int> sorted = tasks;
+    sort(sorted.begin(), sorted.end(), [&](int a, int b){
+        if (upRank[a] != upRank[b]) return upRank[a] > upRank[b];
+        return a < b;
+    });
+
+    for (int tid : sorted) {
+        int bestVM = 0;
+        double bestEFT = merge_INF;
+        double bestEST = 0.0;
+
+        for (int v = 0; v < m; ++v) {
+            double est = 0.0;
+            double eft = merge_computeEFT(dag, tid, v, st, est);
+            if (eft < bestEFT) {
+                bestEFT = eft;
+                bestVM = v;
                 bestEST = est;
             }
         }
@@ -373,7 +447,7 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
 //  SECTION 5 — ADAPTIVE LEVEL CLASSIFICATION
 // ════════════════════════════════════════════════════════════════════════════
 
-enum class LevelStrategy { DAC, DP_LOOKAHEAD, EDP_GLOBAL };
+enum class LevelStrategy { DAC, HEFT, GREEDY_MINMIN, DP_LOOKAHEAD, EDP_GLOBAL };
 
 static LevelStrategy classifyLevel(const DAGData& dag,
                                    const vector<int>& level,
@@ -382,32 +456,55 @@ static LevelStrategy classifyLevel(const DAGData& dag,
 {
     int m = static_cast<int>(dag.vms.size());
     int width = static_cast<int>(level.size());
+    int totalTasks = static_cast<int>(dag.tasks.size());
 
-    // Highly parallel level: width > 2 * numVMs → D&C is fastest
+    // 1) Very wide levels: use D&C to avoid scheduler bottlenecks
     if (width > 2 * m)
         return LevelStrategy::DAC;
 
-    // Check if any task in this level is on the critical path
-    double critThreshold = profile.criticalPathLen * 0.6;
-    bool hasCritical = false;
+    // 2) Large workflows: HEFT for speed and scalability
+    if (totalTasks >= 4 * m)
+        return LevelStrategy::HEFT;
+
+    // 3) Task uniformity: compute coefficient of variation of avg exec times
+    double sum = 0.0;
+    vector<double> vals;
     for (int tid : level) {
-        if (upRank[tid] >= critThreshold) {
-            hasCritical = true;
-            break;
-        }
+        double v = merge_avgExec(dag, tid);
+        vals.push_back(v);
+        sum += v;
+    }
+    double mean = (vals.empty() ? 0.0 : sum / static_cast<double>(vals.size()));
+    double var = 0.0;
+    for (double v : vals) var += (v - mean) * (v - mean);
+    double stddev = (vals.empty() ? 0.0 : sqrt(var / static_cast<double>(vals.size())));
+    double cov = (mean > 0.0 ? stddev / mean : 0.0);
+
+    // If tasks are roughly uniform, prefer Min-Min greedy
+    if (cov <= 0.15)
+        return LevelStrategy::GREEDY_MINMIN;
+
+    // Moderate variability: use DP look-ahead if affordable, otherwise Min-Min
+    if (cov > 0.15 && cov <= 0.6) {
+        if (width <= 3 * m) return LevelStrategy::DP_LOOKAHEAD;
+        return LevelStrategy::GREEDY_MINMIN;
     }
 
-    // Critical-path tasks: use EDP global DP for optimal assignment
-    // But only if level is small enough for the O(k*m^2) DP to be practical
+    // High variability: consider critical-path and EDP if small; else DP or Min-Min
+    double critThreshold = profile.criticalPathLen * 0.6;
+    bool hasCritical = false;
+    for (int tid : level) if (upRank[tid] >= critThreshold) { hasCritical = true; break; }
+
     if (hasCritical && width <= 3 * m)
         return LevelStrategy::EDP_GLOBAL;
 
-    // Medium levels: DP look-ahead balances quality and speed
-    return LevelStrategy::DP_LOOKAHEAD;
+    if (width <= 3 * m) return LevelStrategy::DP_LOOKAHEAD;
+
+    return LevelStrategy::GREEDY_MINMIN;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  SECTION 6 — GLOBAL REFINEMENT (Phase 3)
+//  Makespan computation.
 // ════════════════════════════════════════════════════════════════════════════
 
 static double computeMakespan(const ScheduleState& st, int n)
@@ -416,244 +513,6 @@ static double computeMakespan(const ScheduleState& st, int n)
     for (int i = 0; i < n; ++i)
         if (st.taskFinish[i] > ms) ms = st.taskFinish[i];
     return ms;
-}
-
-
-// Full schedule replay: recomputes all EST/EFT given current taskVm assignments
-// using topological order (task IDs are topologically ordered by construction)
-static void replaySchedule(const DAGData& dag, ScheduleState& st)
-{
-    int n = static_cast<int>(dag.tasks.size());
-    int m = static_cast<int>(dag.vms.size());
-
-    st.vmReady.assign(m, 0.0);
-    st.taskFinish.assign(n, 0.0);
-    st.scheduled.clear();
-
-    for (int tid = 0; tid < n; ++tid) {
-        int vm = st.taskVm[tid];
-        double est = 0.0;
-        double eft = merge_computeEFT(dag, tid, vm, st, est);
-        st.vmReady[vm]      = eft;
-        st.taskFinish[tid]  = eft;
-        st.scheduled[tid]   = {tid, vm, est, eft};
-    }
-}
-
-// Enhanced swap-based refinement: try swapping pairs of tasks between VMs
-static void tryTaskSwaps(const DAGData& dag, ScheduleState& st, int n)
-{
-    int m = static_cast<int>(dag.vms.size());
-    double currentMakespan = computeMakespan(st, n);
-    bool improved = true;
-
-    int swapAttempts = 0;
-    const int maxSwaps = min(n * n / 4, 50);  // more aggressive swap search
-
-    while (improved && swapAttempts < maxSwaps) {
-        improved = false;
-        swapAttempts++;
-
-        for (int tid1 = 0; tid1 < n - 1; ++tid1) {
-            for (int tid2 = tid1 + 1; tid2 < n; ++tid2) {
-                int vm1 = st.taskVm[tid1];
-                int vm2 = st.taskVm[tid2];
-                if (vm1 == vm2) continue;
-
-                // Try swapping
-                swap(st.taskVm[tid1], st.taskVm[tid2]);
-                replaySchedule(dag, st);
-                double newMakespan = computeMakespan(st, n);
-
-                if (newMakespan < currentMakespan) {
-                    currentMakespan = newMakespan;
-                    improved = true;
-                    break;
-                } else {
-                    swap(st.taskVm[tid1], st.taskVm[tid2]);
-                    replaySchedule(dag, st);
-                }
-            }
-            if (improved) break;
-        }
-    }
-}
-
-// Global DP-inspired optimization: try all VM combinations for top critical tasks
-static void globalDPPhase(const DAGData& dag, ScheduleState& st,
-                          const vector<double>& upRank, int n)
-{
-    int m = static_cast<int>(dag.vms.size());
-    double currentMakespan = computeMakespan(st, n);
-    
-    // Find top critical tasks
-    vector<pair<double, int>> rankedTasks;
-    for (int i = 0; i < n; ++i)
-        rankedTasks.push_back({upRank[i], i});
-    sort(rankedTasks.rbegin(), rankedTasks.rend());
-    
-    // Try reassigning top critical tasks in different combinations
-    int numTopTasks = min(5, n);
-    vector<int> topTasks;
-    for (int i = 0; i < numTopTasks; ++i)
-        topTasks.push_back(rankedTasks[i].second);
-    
-    // Try all combinations of VM assignments for top tasks
-    function<void(int, double)> tryAssignments = [&](int idx, double lastMakespan) {
-        if (idx >= numTopTasks) {
-            double newMakespan = computeMakespan(st, n);
-            if (newMakespan < currentMakespan) {
-                currentMakespan = newMakespan;
-            }
-            return;
-        }
-        
-        int tid = topTasks[idx];
-        int origVM = st.taskVm[tid];
-        
-        for (int vm = 0; vm < m; ++vm) {
-            st.taskVm[tid] = vm;
-            replaySchedule(dag, st);
-            double testMakespan = computeMakespan(st, n);
-            
-            // Prune: only continue if promising
-            if (testMakespan <= lastMakespan * 1.2) {
-                tryAssignments(idx + 1, testMakespan);
-            }
-        }
-        st.taskVm[tid] = origVM;
-    };
-    
-    tryAssignments(0, currentMakespan);
-    replaySchedule(dag, st);
-}
-
-// Aggressive refinement: try migrating all tasks, not just bottlenecks
-static void aggressiveMigration(const DAGData& dag, ScheduleState& st, 
-                                const vector<double>& upRank, int n)
-{
-    int m = static_cast<int>(dag.vms.size());
-    double currentMakespan = computeMakespan(st, n);
-
-    // Collect all tasks sorted by critical-path priority (upward rank)
-    vector<int> allTasks(n);
-    iota(allTasks.begin(), allTasks.end(), 0);
-    sort(allTasks.begin(), allTasks.end(), [&](int a, int b) {
-        return upRank[a] > upRank[b];  // critical-path tasks first
-    });
-
-    // Try migrating top 40% of critical tasks aggressively
-    int numCritical = max(2, (n * 2) / 5);
-    for (int i = 0; i < numCritical; ++i) {
-        int tid = allTasks[i];
-        int origVM = st.taskVm[tid];
-        double bestNewMakespan = currentMakespan;
-        int bestNewVM = origVM;
-
-        for (int v = 0; v < m; ++v) {
-            if (v == origVM) continue;
-            st.taskVm[tid] = v;
-            replaySchedule(dag, st);
-            double newMakespan = computeMakespan(st, n);
-
-            if (newMakespan < bestNewMakespan) {
-                bestNewMakespan = newMakespan;
-                bestNewVM = v;
-            }
-        }
-
-        st.taskVm[tid] = bestNewVM;
-        replaySchedule(dag, st);
-        if (bestNewVM != origVM) {
-            currentMakespan = bestNewMakespan;
-        }
-    }
-}
-
-static void globalRefinement(const DAGData& dag, ScheduleState& st,
-                             const vector<double>& upRank,
-                             int maxIterations = 5)
-{
-    int n = static_cast<int>(dag.tasks.size());
-    int m = static_cast<int>(dag.vms.size());
-
-    // ── Phase 3a: Bottleneck-targeted migration ──────────────────────────────
-    for (int iter = 0; iter < maxIterations; ++iter) {
-        double currentMakespan = computeMakespan(st, n);
-        bool improved = false;
-
-        int bottleneckVM = 0;
-        double maxVmFinish = 0.0;
-        for (int v = 0; v < m; ++v) {
-            if (st.vmReady[v] > maxVmFinish) {
-                maxVmFinish = st.vmReady[v];
-                bottleneckVM = v;
-            }
-        }
-
-        vector<int> bottleneckTasks;
-        for (int tid = 0; tid < n; ++tid) {
-            if (st.taskVm[tid] == bottleneckVM)
-                bottleneckTasks.push_back(tid);
-        }
-        sort(bottleneckTasks.begin(), bottleneckTasks.end(), [&](int a, int b) {
-            return st.taskFinish[a] > st.taskFinish[b];
-        });
-
-        for (int tid : bottleneckTasks) {
-            int origVM = st.taskVm[tid];
-            double bestNewMakespan = currentMakespan;
-            int bestNewVM = origVM;
-
-            for (int v = 0; v < m; ++v) {
-                if (v == origVM) continue;
-                st.taskVm[tid] = v;
-                replaySchedule(dag, st);
-                double newMakespan = computeMakespan(st, n);
-
-                if (newMakespan < bestNewMakespan) {
-                    bestNewMakespan = newMakespan;
-                    bestNewVM = v;
-                }
-            }
-
-            st.taskVm[tid] = bestNewVM;
-            replaySchedule(dag, st);
-
-            if (bestNewVM != origVM) {
-                currentMakespan = bestNewMakespan;
-                improved = true;
-            }
-        }
-
-        if (!improved) break;
-    }
-
-    // ── Phase 3b: Aggressive critical-path migration ──────────────────────────
-    aggressiveMigration(dag, st, upRank, n);
-
-    // ── Phase 3c: Task swap optimization ─────────────────────────────────────
-    tryTaskSwaps(dag, st, n);
-
-    // ── Phase 3d: Global DP phase (EDP-inspired) ─────────────────────────────
-    globalDPPhase(dag, st, upRank, n);
-
-    // ── Phase 3e: Final aggressive pass ──────────────────────────────────────
-    double bestGlobalMakespan = computeMakespan(st, n);
-    ScheduleState bestState = st;
-
-    for (int pass = 0; pass < 3; ++pass) {
-        aggressiveMigration(dag, st, upRank, n);
-        tryTaskSwaps(dag, st, n);
-        
-        double newMakespan = computeMakespan(st, n);
-        if (newMakespan < bestGlobalMakespan) {
-            bestGlobalMakespan = newMakespan;
-            bestState = st;
-        }
-    }
-
-    st = bestState;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -684,16 +543,20 @@ AlgorithmResult merge_schedule(const DAGData& dag)
     st.taskFinish.assign(n, 0.0);
     st.taskVm.assign(n, -1);
 
-    // Try two different scheduling approaches and pick the better one
+    // Adaptive per-level scheduling: select best strategy per level
     ScheduleState stAdaptive = st;
-    ScheduleState stGlobal = st;
-    
-    // Approach 1: Adaptive per-level (original)
+
     for (const auto& level : levels) {
         LevelStrategy strategy = classifyLevel(dag, level, upRank, profile);
         switch (strategy) {
             case LevelStrategy::DAC:
                 scheduleLevel_DaC(dag, level, stAdaptive);
+                break;
+            case LevelStrategy::HEFT:
+                scheduleLevel_HEFT(dag, level, upRank, stAdaptive);
+                break;
+            case LevelStrategy::GREEDY_MINMIN:
+                scheduleLevel_MinMin(dag, level, stAdaptive);
                 break;
             case LevelStrategy::DP_LOOKAHEAD:
                 scheduleLevel_DP(dag, level, biRank, stAdaptive);
@@ -703,27 +566,13 @@ AlgorithmResult merge_schedule(const DAGData& dag)
                 break;
         }
     }
-    
-    // Approach 2: Global EDP on all tasks (more aggressive)
-    vector<int> allTasks(n);
-    iota(allTasks.begin(), allTasks.end(), 0);
-    sort(allTasks.begin(), allTasks.end(), [&](int a, int b) {
-        return biRank[a] > biRank[b];
-    });
-    scheduleLevel_EDP(dag, allTasks, biRank, stGlobal);
 
-    // Choose the better initial schedule
-    double makespanAdaptive = computeMakespan(stAdaptive, n);
-    double makespanGlobal = computeMakespan(stGlobal, n);
-    st = (makespanGlobal < makespanAdaptive) ? stGlobal : stAdaptive;
-
-    // ── Phase 3: Global Refinement ───────────────────────────────────────────
-    globalRefinement(dag, st, upRank, 5);
+    st = stAdaptive;
 
     // ── Build AlgorithmResult ────────────────────────────────────────────────
     AlgorithmResult result;
     result.algorithmName = "Optimization Algorithm (OP)";
-    result.algorithmDesc = "Adaptive hybrid: D&C + DP look-ahead + EDP global DP | Refinement pass";
+    result.algorithmDesc = "Adaptive hybrid: D&C + HEFT + Min-Min + DP + EDP";
     result.isValid       = true;
     result.makespan      = computeMakespan(st, n);
 

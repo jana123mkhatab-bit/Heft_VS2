@@ -19,7 +19,7 @@
 #include <iostream>
 #include <string>
 #include <iomanip>
-//#include <algorithm>
+#include <algorithm>
 #include <vector>
 
 #include "models/dag_generator.h"
@@ -52,7 +52,7 @@ int main()
     // -------------------------------------------------------
     // Header
     // -------------------------------------------------------
-    printBanner("DAG TASK SCHEDULING GENERATOR  ");
+    printBanner("DAG TASK SCHEDULING GENERATOR  |  Pure C++  |  No Qt");
 
     // -------------------------------------------------------
     // User Input – Number of Tasks and VMs
