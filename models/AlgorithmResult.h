@@ -19,7 +19,9 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <algorithm>
 #include <iomanip>
+using namespace std;
 
 // ============================================================
 //  ScheduleEntry
@@ -61,7 +63,7 @@ struct AlgorithmResult {
 //  PUBLIC: printAlgorithmResult (for DP results)
 // ============================================================
 
-void printAlgorithmResult(const AlgorithmResult& result)
+inline void printAlgorithmResult(const AlgorithmResult& result)
 {
     const std::string border(60, '=');
     std::cout << "\n" << border << "\n";
@@ -69,8 +71,8 @@ void printAlgorithmResult(const AlgorithmResult& result)
     std::cout << border << "\n\n";
 
     // Sort entries by task ID for clean display
-    std::vector<ScheduleEntry> sorted = result.entries;
-    std::sort(sorted.begin(), sorted.end(),
+    vector<ScheduleEntry> sorted = result.entries;
+    sort(sorted.begin(), sorted.end(),
               [](const ScheduleEntry& a, const ScheduleEntry& b){
                   return a.taskId < b.taskId;
               });
