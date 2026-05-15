@@ -31,6 +31,7 @@
 #include <numeric>
 #include <map>
 #include <vector>
+#include <cmath>
 using namespace std;
 
 static constexpr double INF = numeric_limits<double>::max();
@@ -186,7 +187,11 @@ AlgorithmResult dp_heft(const DAGData& dag)
     vector<int> priority(n);
     iota(priority.begin(), priority.end(), 0);
     sort(priority.begin(), priority.end(),
-              [&](int a, int b) { return biRank[a] > biRank[b]; });
+              [&](int a, int b) {
+                  if (abs(biRank[a] - biRank[b]) > 1e-9) return biRank[a] > biRank[b];
+                  if (abs(upRank[a] - upRank[b]) > 1e-9) return upRank[a] > upRank[b];
+                  return a < b;
+              });
 
     // ── Step 3: Greedy assignment with 2-task look-ahead DP ─────────────────
     vector<double> vmReady(m, 0.0);
@@ -209,19 +214,22 @@ AlgorithmResult dp_heft(const DAGData& dag)
             if (pi + 1 < n) {
                 int nextTid = priority[pi + 1];
 
-                // Temporarily commit current task to VM v
-                vector<double> tmpVmR = vmReady;
-                map<int, ScheduleEntry> tmpSched = scheduled;
-                tmpVmR[v] = eft;
-                tmpSched[tid] = {tid, v, est, eft};
+                // Temporarily commit current task to VM v in-place
+                double oldVmReady = vmReady[v];
+                vmReady[v] = eft;
+                scheduled[tid] = {tid, v, est, eft};
 
                 double bestNextEFT = INF;
                 for (int nv = 0; nv < m; ++nv) {
                     double nEST = 0.0;
-                    double nEFT = computeEFT(dag, nextTid, nv, tmpVmR, tmpSched, nEST);
+                    double nEFT = computeEFT(dag, nextTid, nv, vmReady, scheduled, nEST);
                     bestNextEFT = std::min(bestNextEFT, nEFT);
                 }
                 lookahead = 0.25 * bestNextEFT; // 25% weight on next task
+
+                // Undo temporary commit
+                vmReady[v] = oldVmReady;
+                scheduled.erase(tid);
             }
 
             double score = eft + lookahead;
@@ -245,6 +253,7 @@ AlgorithmResult dp_heft(const DAGData& dag)
     AlgorithmResult result;
     result.algorithmName = "HEFT + DP";
     result.algorithmDesc = "Bilateral rank with 2-task look-ahead";
+    result.isValid       = true;
     for (const auto& kv : scheduled)
         result.entries.push_back(kv.second);
 

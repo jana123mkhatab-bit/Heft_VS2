@@ -128,7 +128,10 @@ int main()
     std::cout << "  Total edges  : " << totalEdges        << "\n";
     std::cout << "  Entry nodes  : " << entryNodes        << "\n";
     std::cout << "  Exit  nodes  : " << exitNodes         << "\n";
-    std::cout << "\n";
+    /*std::cout << "  commCostFactor (CCR) : " << std::fixed << std::setprecision(4)
+              << dag.commCostFactor
+              << "  (set this same value in Qt UI to reproduce results)\n";
+    std::cout << "\n";*/
 
     // -------------------------------------------------------
     // Step 4 – Run greedy HEFT scheduling
@@ -140,7 +143,7 @@ int main()
     // -------------------------------------------------------
     // Step 5 – Run HEFT + DP scheduling
     // -------------------------------------------------------
-    printBanner("STEP 5 – HEFT + DP Scheduling");
+    printBanner("STEP LookAhead Heft Scheduling");
     AlgorithmResult dpResult = dp_heft(dag);
     printAlgorithmResult(dpResult);
 
@@ -189,7 +192,7 @@ int main()
 
     std::vector<AlgoResult> results = {
         {"HEFT (Greedy)", heftResult.makespan, heftResult.runtimeMs},
-        {"HEFT + DP (2-Task Look-Ahead)", dpResult.makespan, dpResult.runtimeMs},
+        {"LookAhead Heft", dpResult.makespan, dpResult.runtimeMs},
         {"EDP HEFT (Enhanced DP)", edpResult.makespan, edpResult.runtimeMs},
         {"Divide & Conquer (Level-based)", dacResult.makespan, dacResult.runtimeMs},
         {"Merge Algorithm", opResult.makespan, opResult.runtimeMs}

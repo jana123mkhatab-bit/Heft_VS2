@@ -21,7 +21,6 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
-#include <chrono>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -44,7 +43,9 @@ static double edp_avgExec(const DAGData& dag, int taskId)
     return sum / static_cast<double>(et.size());
 }
 
-static double edp_commCost(const DAGData& dag,int predTask, int predVm,int /*succTask*/, int succVm)
+static double edp_commCost(const DAGData& dag,
+                            int predTask, int predVm,
+                            int /*succTask*/, int succVm)
 {
     if (predVm == succVm) return 0.0;
     constexpr double COMM_FACTOR = 0.3;
@@ -202,8 +203,6 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 
 AlgorithmResult edp_heft(const DAGData& dag)
 {
-    auto startTime = std::chrono::high_resolution_clock::now();
-
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
@@ -217,13 +216,8 @@ AlgorithmResult edp_heft(const DAGData& dag)
 
     vector<int> priority(n);
     iota(priority.begin(), priority.end(), 0);
-   sort(priority.begin(), priority.end(), [&](int a, int b) {
-    if (biRank[a] != biRank[b]) return biRank[a] > biRank[b];
-    // Tie-break: if a is a predecessor of b, a comes first
-    for (int succ : dag.tasks[a].successors)
-        if (succ == b) return true;
-    return a < b;   // stable fallback
-});
+    sort(priority.begin(), priority.end(),
+         [&](int a, int b) { return biRank[a] > biRank[b]; });
 
     // Phase 2: DP VM assignment
     vector<int> assignment = edp_runDP(dag, priority);
@@ -254,15 +248,11 @@ AlgorithmResult edp_heft(const DAGData& dag)
     }
 
     // Build AlgorithmResult
-    auto endTime = std::chrono::high_resolution_clock::now();
-    double runtimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-
     AlgorithmResult result;
     result.algorithmName = "EDP-HEFT";
     result.algorithmDesc = "Bilateral rank + Full Global DP VM Selection  |  O(n * m^2)";
     result.isValid       = true;
     result.makespan      = *max_element(vmReady.begin(), vmReady.end());
-    result.runtimeMs     = runtimeMs;
 
     for (const auto& kv : scheduled)
         result.entries.push_back(kv.second);
