@@ -122,7 +122,10 @@ DAGData generateDAG(int numTasks, int numVMs)
 
 
 
-// Part: Helpers
+// Part: Public API Implementations
+double calculateCommCostFactor(const DAGData& dag)
+{
+    const int numTasks = static_cast<int>(dag.tasks.size());
     const int numVMs   = static_cast<int>(dag.vms.size());
     
     if (numTasks < 2 || numVMs < 1) return 0.3; 
