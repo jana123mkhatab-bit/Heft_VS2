@@ -504,10 +504,7 @@ static LevelStrategy classifyLevel(const DAGData& dag,
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  SECTION 6 — POSTPROCESSING REMOVED
-//  The previous globalRefinement stage (task swaps, migrations, global DP)
-//  has been removed to improve performance and preserve experimental
-//  reproducibility. Makespan computation remains available.
+//  Makespan computation.
 // ════════════════════════════════════════════════════════════════════════════
 
 static double computeMakespan(const ScheduleState& st, int n)
@@ -570,10 +567,7 @@ AlgorithmResult merge_schedule(const DAGData& dag)
         }
     }
 
-    // Use the adaptive schedule as the starting point; do not run a global EDP
     st = stAdaptive;
-
-    // Phase 3 removed: no global refinement pass (performance-preserving)
 
     // ── Build AlgorithmResult ────────────────────────────────────────────────
     AlgorithmResult result;
