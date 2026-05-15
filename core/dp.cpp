@@ -24,7 +24,7 @@ static constexpr double INF = numeric_limits<double>::max();
 
 // Part: Helpers
 static double commCost(const DAGData& dag, int predTask, int predVm,
-                       int  , int succVm)
+                    int succVm)
 {
     if (predVm == succVm) return 0.0;
 
@@ -51,7 +51,7 @@ static double computeEFT(const DAGData& dag,
         if (it == scheduled.end()) continue; 
 
         const ScheduleEntry& se = it->second;
-        double cc = commCost(dag, predId, se.vmId, taskId, vmId);
+        double cc = commCost(dag, predId, se.vmId, vmId);
         est = std::max(est, se.finishTime + cc);
     }
 
@@ -78,7 +78,7 @@ static vector<double> computeUpwardRank(const DAGData& dag)
         double best = 0.0;
         for (int succ : dag.tasks[id].successors) {
             
-            double cc = commCost(dag, id, 0, succ, 1);
+            double cc = commCost(dag, id, 0, 1);
             best = std::max(best, cc + calc(succ));
         }
         return rank[id] = avgExec(id) + best;
@@ -105,7 +105,7 @@ static vector<double> computeDownwardRank(const DAGData& dag)
 
         double best = 0.0;
         for (int pred : dag.tasks[id].predecessors) {
-            double cc = commCost(dag, pred, 0, id, 1);
+            double cc = commCost(dag, pred, 0, 1);
             best = std::max(best, calc(pred) + avgExec(pred) + cc);
         }
         return rank[id] = best;

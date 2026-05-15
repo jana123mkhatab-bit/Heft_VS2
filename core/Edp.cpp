@@ -31,7 +31,7 @@ static double edp_avgExec(const DAGData& dag, int taskId)
 
 static double edp_commCost(const DAGData& dag,
                             int predTask, int predVm,
-                            int  , int succVm)
+                            int succVm)
 {
     if (predVm == succVm) return 0.0;
     return dag.commCostFactor * edp_avgExec(dag, predTask);
@@ -50,7 +50,7 @@ static vector<double> edp_upwardRank(const DAGData& dag)
         if (rank[id] >= 0.0) return rank[id];
         double best = 0.0;
         for (int succ : dag.tasks[id].successors) {
-            double cc = edp_commCost(dag, id, 0, succ, 1);
+            double cc = edp_commCost(dag, id, 0, 1);
             best = max(best, cc + calc(succ));
         }
         return rank[id] = edp_avgExec(dag, id) + best;
@@ -69,7 +69,7 @@ static vector<double> edp_downwardRank(const DAGData& dag)
         if (rank[id] >= 0.0) return rank[id];
         double best = 0.0;
         for (int pred : dag.tasks[id].predecessors) {
-            double cc = edp_commCost(dag, pred, 0, id, 1);
+            double cc = edp_commCost(dag, pred, 0, 1);
             best = max(best, calc(pred) + edp_avgExec(dag, pred) + cc);
         }
         return rank[id] = best;
@@ -99,7 +99,7 @@ static double edp_computeEFT(const DAGData& dag,
 
     for (int predId : dag.tasks[taskId].predecessors) {
         if (snap.taskVm[predId] < 0) continue;
-        double cc = edp_commCost(dag, predId, snap.taskVm[predId], taskId, vmId);
+        double cc = edp_commCost(dag, predId, snap.taskVm[predId], vmId);
         est = max(est, snap.taskFinish[predId] + cc);
     }
 

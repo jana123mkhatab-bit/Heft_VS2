@@ -94,11 +94,13 @@ Graphs (DAGs) onto heterogeneous Virtual Machines (VMs) is a
 fundamental NP-hard problem in cloud computing. This paper presents
 and compares five scheduling algorithms implemented in pure C++17 in
 the following order: (1) \emph{HEFT} as the classical baseline,
-(2) \emph{DP-HEFT} with bilateral-rank and 2-task look-ahead,
+(2) \emph{DP-HEFT} with bilateral-rank and 2-task look-ahead
+(the implementation reports this variant as \texttt{"HEFT + DP"}),
 (3) \emph{Enhanced DP (EDP-HEFT)} with global DP assignment,
 (4) \emph{Divide-and-Conquer} (D\&C) with level decomposition, and
-(5) \emph{Merge}, a hybrid scheduler that combines adaptive strategy
-selection with refinement. All algorithms share a unified
+(5) \emph{Merge}, a hybrid scheduler (implemented and reported as
+\texttt{"Optimization Algorithm (OP)"}) that combines adaptive
+strategy selection with refinement. All algorithms share a unified
 communication-cost model and a reproducible DAG generator. Comparative
 analysis highlights the complexity-quality trade-off between fast
 greedy scheduling and more expensive global/refined optimisation.
@@ -274,20 +276,24 @@ task-VM pair to model genuine heterogeneity.
 \subsection{Communication Cost Model}
 
 When task $t_i$ (assigned to VM $v_p$) produces data consumed by
-task $t_j$ (assigned to VM $v_q$), the inter-VM data transfer
-incurs a communication delay modelled as:
+task $t_j$ (assigned to VM $v_q$), the inter-VM data transfer incurs
+a communication delay modelled as:
 \begin{equation}
-  c(t_i, v_p, t_j, v_q) =
-  \begin{cases}
-    0 & \text{if } p = q,\\
-    \alpha \cdot \bar{w}_i & \text{otherwise,}
-  \end{cases}
-  \label{eq:comm}
+      c(t_i, v_p, t_j, v_q) =
+      \begin{cases}
+            0 & \text{if } p = q,\\
+            \kappa \cdot \bar{w}_i & \text{otherwise,}
+      \end{cases}
+      \label{eq:comm}
 \end{equation}
 where $\bar{w}_i = \frac{1}{M}\sum_{k=0}^{M-1} w_{ik}$ is the
-average execution time of task $t_i$ across all VMs, and
-$\alpha = 0.3$ is the communication factor (implemented identically
-in \texttt{dp.cpp}, \texttt{Edp.cpp}, and \texttt{dac.cpp}).
+average execution time of task $t_i$ across all VMs. In the
+implemented C++ framework the communication multiplier (here denoted
+by $\kappa$) is computed dynamically by the DAG generator
+(function \texttt{calculateCommCostFactor()} in \texttt{dag\_generator.cpp})
+based on graph density, execution-time granularity and VM heterogeneity.
+This computed \texttt{commCostFactor} is stored in \texttt{DAGData} and
+used uniformly by all schedulers (see \texttt{dag\_generator.cpp}).
 
 \subsection{Scheduling Objective}
 
@@ -380,8 +386,10 @@ The core data types, defined in \texttt{dag\_generator.h} and
 
 \texttt{main.cpp} executes the following pipeline:
 \begin{enumerate}
-  \item Generate a DAG with \texttt{DEFAULT\_NUM\_TASKS = 10} tasks
-        and \texttt{DEFAULT\_NUM\_VMS = 5} VMs.
+  \item Generate a DAG with the implementation defaults
+        (\texttt{DEFAULT\_NUM\_TASKS = 40} tasks and
+        \texttt{DEFAULT\_NUM\_VMS = 7} VMs as declared in
+        \texttt{dag\_generator.h}).
   \item Print the full DAG structure (VM speed factors, per-task
         adjacency lists, per-VM execution times).
   \item Validate the DAG against eight structural checks.
@@ -400,9 +408,10 @@ $\mathcal{U}(0.5,\,2.0)$; (2) tasks are created with execution times
 drawn from $\mathcal{U}(1.0,\,20.0)$ per VM; (3) for every ordered
 pair $(i,j)$ with $i < j$, edge $t_i \to t_j$ is added with
 probability $p_e = 0.35$. Acyclicity is guaranteed by construction
-since $j > i$ always holds. At least one edge is guaranteed by
-inserting $t_0 \to t_{N-1}$ if the probabilistic process yields an
-empty graph.
+since $j > i$ always holds. The generator uses a fixed Mersenne
+Twister seed (42) for reproducibility. The implementation also
+computes a data-transfer multiplier (stored as \texttt{commCostFactor})
+from graph and VM statistics rather than using a hard-coded constant.
 
 \subsection{DAG Validation}
 
@@ -455,6 +464,8 @@ for both makespan and computational overhead.
 DP-HEFT extends HEFT by replacing pure upward-rank ordering with
 bilateral rank ($\ranku + \rankd$), then applying a weighted 2-task
 look-ahead when selecting the VM for the current task.
+The implemented C++ variant is exposed as \texttt{"HEFT + DP"} in the
+codebase and follows the described bilateral-rank + 2-task look-ahead.
 
 \subsection{EDP-HEFT}
 
@@ -471,11 +482,12 @@ while enforcing precedence and communication constraints globally.
 
 \subsection{Merge Algorithm (Hybrid OP)}
 
-The Merge algorithm (implemented in \texttt{merge.cpp}) is a hybrid
-strategy that integrates D\&C decomposition, DP look-ahead, and
-EDP-style global assignment in one adaptive pipeline.
-Its role is to improve schedule quality over local heuristics while
-retaining practical runtime on moderate DAG sizes.
+The Merge algorithm (implemented in \texttt{merge.cpp} and reported
+by the executable as \texttt{"Optimization Algorithm (OP)"}) is a
+hybrid strategy that integrates D\&C decomposition, DP look-ahead,
+and EDP-style global assignment in one adaptive pipeline. Its role is
+to improve schedule quality over local heuristics while retaining
+practical runtime on moderate DAG sizes.
 
 \begin{algorithm}[!t]
 \caption{Merge Hybrid Scheduling}
@@ -545,7 +557,7 @@ but this cost is used to improve final schedule quality.
 \subsection{Comparative Analysis}
 
 Based on Table~\ref{tab:complexity} and the default deterministic run
-($n=10$, $m=5$, fixed seed 42), the following observations hold:
+($n=40$, $m=7$, fixed seed 42), the following observations hold:
 \begin{itemize}
   \item \textbf{Highest time complexity:} Merge (Hybrid), due to multi-pass
         refinement over full schedule replays.
@@ -579,8 +591,10 @@ ensure fair comparison between algorithms.
 \label{sec:setup}
 
 Experiments use the default configuration in \texttt{main.cpp}:
-$n=10$ tasks, $m=5$ heterogeneous VMs, edge probability $p_e=0.35$,
-and fixed RNG seed 42 for reproducibility.
+$n=40$ tasks, $m=7$ heterogeneous VMs, edge probability $p_e=0.35$,
+and fixed RNG seed 42 for reproducibility. The implementation computes
+an instance-specific communication multiplier (\texttt{commCostFactor})
+at DAG generation time and reports it in the run summary.
 
 % ============================================================
 %  X. RESULTS
@@ -588,7 +602,7 @@ and fixed RNG seed 42 for reproducibility.
 \section{Results}
 \label{sec:results}
 
-For the default deterministic DAG instance, the observed makespan
+For the default deterministic DAG instance (implementation defaults), the observed makespan
 ordering is:
 \[
 \text{D\&C} > \text{HEFT} > \text{DP-HEFT} > \text{EDP-HEFT} \approx \text{Merge}.

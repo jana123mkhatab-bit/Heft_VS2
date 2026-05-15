@@ -13,7 +13,6 @@ using namespace std;
 static double dac_commCost(const DAGData& dag,
                            int predTask,
                            int predVm,
-                           int  ,
                            int succVm)
 {
     if (predVm == succVm) return 0.0;
@@ -149,7 +148,7 @@ AlgorithmResult dac_schedule(const DAGData& dag) {
                 double commCost = 0.0;
 
                 if (taskVM[pred] != v) {
-                    commCost = dac_commCost(dag, pred, taskVM[pred], u, v);
+                    commCost = dac_commCost(dag, pred, taskVM[pred], v);
                 }
 
                 readyTime = max(readyTime,
