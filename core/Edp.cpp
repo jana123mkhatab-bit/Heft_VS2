@@ -27,6 +27,7 @@
 #include <numeric>
 #include <vector>
 #include <map>
+#include <queue>
 
 using namespace std;
 
@@ -131,68 +132,110 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
     int m = static_cast<int>(dag.vms.size());
     int T = static_cast<int>(dag.tasks.size());
 
-    vector<vector<double>>      dp(n, vector<double>(m, EDP_INF));
-    vector<vector<int>>         parent(n, vector<int>(m, -1));
+    // dp[i][v] = true global makespan after scheduling priority[0..i] with
+    // priority[i] on VM v.  We store the full vmReady vector here instead of
+    // a scalar so the NEXT step can compute accurate EFTs.
+    struct State {
+        double makespan = EDP_INF;
+        vector<double> vmReady;      // length m
+        vector<double> taskFinish;   // length T, -1 if unscheduled
+        vector<int>    taskVm;       // length T, -1 if unscheduled
+    };
 
-    EDPSnapshot emptySnap;
-    emptySnap.vmReady    = vector<double>(m, 0.0);
-    emptySnap.taskFinish = vector<double>(T, -1.0);
-    emptySnap.taskVm     = vector<int>(T, -1);
+    // Only keep two rows at a time — O(m × T) memory instead of O(n×m×T)
+    vector<State> prev(m), curr(m);
 
-    vector<vector<EDPSnapshot>> snaps(n, vector<EDPSnapshot>(m, emptySnap));
+    // Initialise rows
+    auto initState = [&](State& s) {
+        s.makespan = EDP_INF;
+        s.vmReady.assign(m, 0.0);
+        s.taskFinish.assign(T, -1.0);
+        s.taskVm.assign(T, -1);
+    };
+    for (auto& s : prev) initState(s);
+    for (auto& s : curr) initState(s);
 
-    // Base case: schedule the first task on every VM
+    // parent[i][v] = which prev_v produced dp[i][v]
+    // We still need all rows of parent for backtracking.
+    vector<vector<int>> parent(n, vector<int>(m, -1));
+
+    // ── Base case ────────────────────────────────────────────────────
     {
         int tid = priority[0];
+        EDPSnapshot snap0;
+        snap0.vmReady.assign(m, 0.0);
+        snap0.taskFinish.assign(T, -1.0);
+        snap0.taskVm.assign(T, -1);
+
         for (int v = 0; v < m; ++v) {
             double est = 0.0;
-            double eft = edp_computeEFT(dag, tid, v, emptySnap, est);
-            dp[0][v] = eft;
-            snaps[0][v].vmReady[v]      = eft;
-            snaps[0][v].taskFinish[tid] = eft;
-            snaps[0][v].taskVm[tid]     = v;
+            double eft = edp_computeEFT(dag, tid, v, snap0, est);
+
+            prev[v].vmReady    = snap0.vmReady;   // all zeros
+            prev[v].vmReady[v] = eft;
+            prev[v].taskFinish = snap0.taskFinish;
+            prev[v].taskFinish[tid] = eft;
+            prev[v].taskVm    = snap0.taskVm;
+            prev[v].taskVm[tid] = v;
+            prev[v].makespan  = eft;              // only one task scheduled
         }
     }
 
-    // Forward fill
+    // ── Forward fill ─────────────────────────────────────────────────
     for (int i = 1; i < n; ++i) {
         int tid = priority[i];
+
+        // Reset curr row
+        for (auto& s : curr) initState(s);
+
         for (int prev_v = 0; prev_v < m; ++prev_v) {
-            if (dp[i-1][prev_v] >= EDP_INF) continue;
-            const EDPSnapshot& parentSnap = snaps[i-1][prev_v];
+            if (prev[prev_v].makespan >= EDP_INF) continue;
+            const State& ps = prev[prev_v];
+
+            // Build a temporary snapshot from ps for edp_computeEFT
+            EDPSnapshot snap;
+            snap.vmReady    = ps.vmReady;
+            snap.taskFinish = ps.taskFinish;
+            snap.taskVm     = ps.taskVm;
 
             for (int v = 0; v < m; ++v) {
                 double est = 0.0;
-                double eft = edp_computeEFT(dag, tid, v, parentSnap, est);
+                double eft = edp_computeEFT(dag, tid, v, snap, est);
 
-                double newMakespan = *max_element(parentSnap.vmReady.begin(),
-                                              parentSnap.vmReady.end());
-                newMakespan = max(newMakespan, eft);
+                // Build the NEW vmReady after placing tid on v
+                vector<double> newVmReady = ps.vmReady;
+                newVmReady[v] = max(newVmReady[v], eft);
 
-                if (newMakespan < dp[i][v]) {
-                    dp[i][v]     = newMakespan;
-                    parent[i][v] = prev_v;
-                    // IMPORTANT: Copy parent snapshot and update ONLY the current task/VM
-                    snaps[i][v]              = parentSnap;
-                    snaps[i][v].vmReady[v]   = eft;
-                    snaps[i][v].taskFinish[tid] = eft;
-                    snaps[i][v].taskVm[tid]  = v;
+                // *** Fix: makespan = max over the UPDATED vmReady ***
+                double newMakespan = *max_element(newVmReady.begin(),
+                                                  newVmReady.end());
+
+                if (newMakespan < curr[v].makespan) {
+                    curr[v].makespan   = newMakespan;
+                    curr[v].vmReady    = newVmReady;
+                    curr[v].taskFinish = ps.taskFinish;
+                    curr[v].taskFinish[tid] = eft;
+                    curr[v].taskVm     = ps.taskVm;
+                    curr[v].taskVm[tid] = v;
+                    parent[i][v]       = prev_v;
                 }
             }
         }
+
+        swap(prev, curr);
     }
 
-    // Find optimal final VM
+    // ── Find optimal final VM ─────────────────────────────────────────
     int    bestFinalVM  = 0;
     double bestMakespan = EDP_INF;
     for (int v = 0; v < m; ++v) {
-        if (dp[n-1][v] < bestMakespan) {
-            bestMakespan = dp[n-1][v];
+        if (prev[v].makespan < bestMakespan) {
+            bestMakespan = prev[v].makespan;
             bestFinalVM  = v;
         }
     }
 
-    // Backtrack
+    // ── Backtrack ─────────────────────────────────────────────────────
     vector<int> assignment(n);
     assignment[n-1] = bestFinalVM;
     for (int i = n - 1; i > 0; --i)
@@ -200,7 +243,6 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 
     return assignment;
 }
-
 // ════════════════════════════════════════════════════════════════════════════
 //  SECTION 5 — PUBLIC API: edp_heft
 // ════════════════════════════════════════════════════════════════════════════
@@ -220,10 +262,50 @@ AlgorithmResult edp_heft(const DAGData& dag)
     for (int i = 0; i < n; ++i)
         biRank[i] = upRank[i] + dnRank[i];
 
-    vector<int> priority(n);
-    iota(priority.begin(), priority.end(), 0);
-    sort(priority.begin(), priority.end(),
-         [&](int a, int b) { return biRank[a] > biRank[b]; });
+
+// ✓ Kahn's algorithm combined with HEFT rank prioritization for DAG-safe ordering
+    struct RankCmp {
+        const vector<double>& biRank;
+
+        RankCmp(const vector<double>& r) : biRank(r) {}
+
+        bool operator()(int a, int b) const {
+            return biRank[a] < biRank[b];  // Max-heap: higher rank comes first
+        }
+    };
+
+    vector<int> indeg(n, 0);
+
+    for (int u = 0; u < n; ++u) {
+        for (int v : dag.tasks[u].successors) {
+            indeg[v]++;
+        }
+    }
+
+    priority_queue<int, vector<int>, RankCmp>
+        pq((RankCmp(biRank)));
+
+    for (int i = 0; i < n; ++i) {
+        if (indeg[i] == 0) {
+            pq.push(i);
+        }
+    }
+
+    vector<int> priority;
+    priority.reserve(n);
+
+    while (!pq.empty()) {
+        int u = pq.top();
+        pq.pop();
+
+        priority.push_back(u);
+
+        for (int v : dag.tasks[u].successors) {
+            if (--indeg[v] == 0) {
+                pq.push(v);
+            }
+        }
+    }
 
     // Phase 2: DP VM assignment
     vector<int> assignment = edp_runDP(dag, priority);
@@ -232,25 +314,25 @@ AlgorithmResult edp_heft(const DAGData& dag)
     vector<double>      vmReady(m, 0.0);
     map<int, ScheduleEntry> scheduled;
 
+    vector<double> taskFinish(n, -1.0);
+    vector<int>    taskVm(n, -1);
+
     for (int i = 0; i < n; ++i) {
         int tid = priority[i];
         int vm  = assignment[i];
 
         EDPSnapshot snap;
         snap.vmReady    = vmReady;
-        snap.taskFinish = vector<double>(n, -1.0);
-        snap.taskVm     = vector<int>(n, -1);
-
-        for (const auto& kv : scheduled) {
-            snap.taskFinish[kv.first] = kv.second.finishTime;
-            snap.taskVm[kv.first]     = kv.second.vmId;
-        }
+        snap.taskFinish = taskFinish;
+        snap.taskVm     = taskVm;
 
         double est = 0.0;
         double eft = edp_computeEFT(dag, tid, vm, snap, est);
 
         scheduled[tid] = {tid, vm, est, eft};
-        vmReady[vm]    = eft;
+        vmReady[vm]    = max(vmReady[vm], eft);
+        taskFinish[tid] = eft;
+        taskVm[tid]     = vm;
     }
 
     auto endTime = std::chrono::high_resolution_clock::now();
