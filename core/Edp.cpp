@@ -42,7 +42,7 @@ static double edp_avgExec(const DAGData& dag, int taskId)
     const vector<double>& et = dag.tasks[taskId].execTimes;
     double sum = 0.0;
     for (double t : et) sum += t;
-    return sum / static_cast<double>(et.size());
+    return sum /(double)(et.size());
 }
 
 static double edp_commCost(const DAGData& dag,
