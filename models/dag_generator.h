@@ -31,10 +31,10 @@
 // ============================================================
 
 /// Default number of tasks in the generated DAG.
-constexpr int DEFAULT_NUM_TASKS = 10;
+constexpr int DEFAULT_NUM_TASKS = 40;
 
 /// Default number of Virtual Machines.
-constexpr int DEFAULT_NUM_VMS = 5;
+constexpr int DEFAULT_NUM_VMS = 7;
 
 /// Probability [0,1] that an edge (i→j) exists (i < j).
 constexpr double EDGE_PROBABILITY = 0.35;
@@ -92,6 +92,7 @@ struct VM {
 struct DAGData {
     std::vector<Task> tasks; ///< All tasks (nodes of the DAG).
     std::vector<VM>   vms;   ///< All VMs (execution resources).
+    double commCostFactor;   ///< Dynamically calculated communication cost factor.
 };
 
 // ============================================================
@@ -118,6 +119,22 @@ struct DAGData {
  */
 DAGData generateDAG(int numTasks = DEFAULT_NUM_TASKS,
                     int numVMs   = DEFAULT_NUM_VMS);
+
+/**
+ * calculateCommCostFactor
+ * ----------------------
+ * Dynamically calculates the communication cost factor based on DAG characteristics:
+ *   - Task granularity (fine vs coarse grained)
+ *   - System heterogeneity (variance in VM speeds)
+ *   - Graph density (edge connectivity)
+ *
+ * Returns a factor in the range [0.1, 0.6] that scales communication costs.
+ * Finer-grained tasks or high heterogeneity → higher factor.
+ *
+ * @param dag  The fully generated DAGData.
+ * @return     Communication cost factor to use in scheduling algorithms.
+ */
+double calculateCommCostFactor(const DAGData& dag);
 
 /**
  * validateDAG

@@ -5,6 +5,7 @@
  *
  * Implements:
  *   - generateDAG()  : random DAG creation using mt19937
+ *   - calculateCommCostFactor()  : dynamic comm cost factor based on DAG characteristics
  *   - validateDAG()  : strict structural validation (8 checks)
  *   - printDAG()     : formatted console output
  *
@@ -14,6 +15,11 @@
  *   sort is needed during generation – the node index IS the topological order.
  *   This approach matches standard research methodology for synthetic DAG
  *   benchmarks (e.g., GE, STG, Epigenomics workflows).
+ *
+ *   Communication cost factor is now dynamically calculated based on:
+ *     - Task granularity (fine-grained tasks → lower factor)
+ *     - System heterogeneity (more diverse VMs → higher factor)
+ *     - Graph density (denser graphs → higher factor)
  *
  * Compatibility: Visual Studio 2019/2022, C++11 or above.
  *   No Qt. No external libraries. Pure Standard C++.
@@ -26,6 +32,8 @@
 #include <random>     // std::random_device, std::mt19937, distributions
 #include <set>        // std::set (duplicate-edge detection)
 #include <algorithm>  // std::find
+#include <cmath>      // std::sqrt
+#include <limits>     // std::numeric_limits
 
 // ============================================================
 //  INTERNAL HELPERS (file-scope only, not exposed in header)
@@ -162,7 +170,105 @@ DAGData generateDAG(int numTasks, int numVMs)
     // Step 3: Wire edges (guarantees acyclicity by construction)
     generateEdges(dag.tasks, gen);
 
+    // Step 4: Calculate communication cost factor dynamically
+    dag.commCostFactor = calculateCommCostFactor(dag);
+
     return dag;
+}
+
+// ============================================================
+//  DYNAMIC COMMUNICATION COST FACTOR CALCULATION
+// ============================================================
+
+double calculateCommCostFactor(const DAGData& dag)
+{
+    const int numTasks = static_cast<int>(dag.tasks.size());
+    const int numVMs   = static_cast<int>(dag.vms.size());
+    
+    if (numTasks < 2 || numVMs < 1) return 0.3; // Default fallback
+
+    // ───────────────────────────────────────────────────────────────
+    // 1. TASK GRANULARITY: Ratio of avg exec time to total work
+    // ───────────────────────────────────────────────────────────────
+    double totalExecTime = 0.0;
+    double minExecTime = std::numeric_limits<double>::max();
+    double maxExecTime = 0.0;
+    
+    for (const Task& t : dag.tasks) {
+        for (double et : t.execTimes) {
+            totalExecTime += et;
+            minExecTime = std::min(minExecTime, et);
+            maxExecTime = std::max(maxExecTime, et);
+        }
+    }
+    
+    double avgExecTime = totalExecTime / (numTasks * numVMs);
+    double granularity = avgExecTime / totalExecTime; // Lower = coarser tasks
+    
+    // ───────────────────────────────────────────────────────────────
+    // 2. SYSTEM HETEROGENEITY: Variance in VM speeds
+    // ───────────────────────────────────────────────────────────────
+    double avgSpeed = 0.0;
+    for (const VM& vm : dag.vms) {
+        avgSpeed += vm.speedFactor;
+    }
+    avgSpeed /= numVMs;
+    
+    double speedVariance = 0.0;
+    for (const VM& vm : dag.vms) {
+        double diff = vm.speedFactor - avgSpeed;
+        speedVariance += diff * diff;
+    }
+    speedVariance /= numVMs;
+    double heterogeneity = std::sqrt(speedVariance) / avgSpeed; // CV of speeds
+    
+    // ───────────────────────────────────────────────────────────────
+    // 3. GRAPH DENSITY: Number of edges vs maximum possible
+    // ───────────────────────────────────────────────────────────────
+    int totalEdges = 0;
+    for (const Task& t : dag.tasks) {
+        totalEdges += static_cast<int>(t.successors.size());
+    }
+    
+    int maxPossibleEdges = (numTasks * (numTasks - 1)) / 2; // Complete graph
+    double density = static_cast<double>(totalEdges) / maxPossibleEdges;
+    
+    // ───────────────────────────────────────────────────────────────
+    // 4. RESOURCE CONTENTION: Task-to-VM ratio
+    // ───────────────────────────────────────────────────────────────
+    double taskVmRatio = static_cast<double>(numTasks) / numVMs;
+    double contention = std::min(1.0, taskVmRatio / 5.0); // Normalized to [0,1]
+    
+    // ───────────────────────────────────────────────────────────────
+    // 5. COMBINED FACTOR CALCULATION
+    // ───────────────────────────────────────────────────────────────
+    // Communication cost factor should be:
+    //   - LOWER when tasks are coarse-grained (comm cost relatively small)
+    //   - LOWER when VM heterogeneity is low (less scheduling variance)
+    //   - LOWER when contention is high (comm cost is less relevant)
+    //   - HIGHER when graph is dense (more dependencies to consider)
+    
+    // Invert granularity: finer tasks → higher factor
+    double fineness = 1.0 - granularity;
+    
+    // Weighted combination
+   // NOTE: Contention has MULTIPLICATIVE effect to properly handle high-load scenarios
+    double baseCommCost = 0.15 +  // Base minimum
+                          0.20 * fineness +           // Fine-grained penalty
+                          0.15 * heterogeneity +      // Heterogeneity impact
+                          0.20 * density;             // Dense graphs
+    
+    // MULTIPLICATIVE contention factor:
+    //   - High contention (0.8-1.0) → multiply by 0.2-0.3 (drastically reduce)
+    //   - Medium contention (0.4-0.8) → multiply by 0.5-0.7
+    //   - Low contention (0.0-0.4) → multiply by 0.8-1.0
+    double contentionFactor = std::max(0.2, 1.0 - 0.8 * contention);  // Range [0.2, 1.0]
+    double factor = baseCommCost * contentionFactor;
+    
+    // Clamp to sensible range [0.1, 0.6]
+    factor = std::max(0.1, std::min(0.6, factor));
+    
+    return factor;
 }
 
 // ============================================================

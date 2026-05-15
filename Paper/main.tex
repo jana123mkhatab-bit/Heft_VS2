@@ -428,389 +428,71 @@ All methods share the EFT-based feasibility model in
 Section~\ref{sec:problem} and the communication model in
 Eq.~\eqref{eq:comm}.
 
-\subsection{HEFT (Baseline): Greedy Earliest Finish Time}
+\subsection{HEFT (Baseline)}
 
-\textbf{Overview:} HEFT~\cite{topcuoglu2002heft} is the foundational greedy
-scheduling algorithm for heterogeneous computing and serves as the classical
-baseline in this study. It prioritizes tasks by upward rank (sum of execution
-time and maximum successor rank), then assigns each task to the VM that yields
-the earliest finish time (EFT). This pure greedy strategy is fast and practical,
-making it the industry standard for immediate scheduling decisions despite
-often producing suboptimal makespans.
-
-\textbf{Algorithm flow:}
-\begin{enumerate}
-  \item Compute upward rank $\ranku(t)$ for all tasks recursively:
-  $$\ranku(t) = \overline{w}(t) + \max_{s \in \text{succ}(t)} (c(t,s) + \ranku(s))$$
-  where $\overline{w}(t)$ is average execution time, and $c(t,s)$ is data
-  transfer cost. Entry tasks have $\ranku = \overline{w}(t)$ only.
-  \item Sort all tasks in descending $\ranku$ order (critical-path heuristic).
-  \item For each task $t_i$ in sorted order:
-  \begin{enumerate}
-    \item Compute EST (earliest start time) on each VM, considering all
-          predecessor dependencies and communication delays.
-    \item Compute EFT on each VM: $\EFT(t, v) = \EST(t, v) + w(t, v)$.
-    \item Select $v^* = \argmin_{v_k} \EFT(t_i, v_k)$ (greedy minimum EFT).
-    \item Update the selected VM's availability time to $\EFT(t_i, v^*)$.
-  \end{enumerate}
-  \item Return the complete assignment and overall makespan.
-\end{enumerate}
+HEFT~\cite{topcuoglu2002heft} computes upward ranks, sorts tasks in
+descending $\ranku$, and greedily assigns each task to the VM yielding
+the minimum EFT. In this study, HEFT serves as the classical baseline
+for both makespan and computational overhead.
 
 \begin{algorithm}[!t]
 \caption{HEFT Scheduling (Greedy EFT)}
 \label{alg:heft}
 \begin{algorithmic}[1]
-\STATE Compute $\ranku(t)$ recursively for all tasks $t \in \mathcal{T}$
+\STATE Compute $\ranku(t)$ for all tasks $t \in \mathcal{T}$
 \STATE Sort tasks by descending $\ranku$
-\FOR{each task $t_i$ in sorted order}
-    \STATE $\text{bestVM} \leftarrow 0$; $\text{bestEFT} \leftarrow \infty$
-    \FOR{each VM $v_k$}
-        \STATE Compute $\EST(t_i, v_k)$ from predecessors
-        \STATE Compute $\EFT(t_i, v_k) \leftarrow \EST(t_i, v_k) + w(t_i, v_k)$
-        \IF{$\EFT(t_i, v_k) < \text{bestEFT}$}
-            \STATE $\text{bestEFT} \leftarrow \EFT(t_i, v_k)$; $\text{bestVM} \leftarrow v_k$
-        \ENDIF
-    \ENDFOR
-    \STATE Assign $t_i$ to $v_{\text{bestVM}}$; update $v_{\text{bestVM}}$ availability
+\FOR{each task $t$ in sorted order}
+    \STATE For each VM $v_k$, compute $\EST(t,v_k)$ and $\EFT(t,v_k)$
+    \STATE Assign $t$ to $v^* = \argmin_{v_k} \EFT(t,v_k)$
+    \STATE Update VM availability and task finish time
 \ENDFOR
 \STATE \textbf{return} complete schedule and makespan
 \end{algorithmic}
 \end{algorithm}
 
-\textbf{Complexity:} Time complexity is $O(n \log n + me)$ where the $n \log n$
-factor dominates the upward-rank computation (critical path via DFS) and task
-sorting, and the $me$ term accounts for EST/EFT evaluation across all task-VM
-pairs and dependency traversals. Space complexity is $O(n + m + e)$ for storing
-task ranks, VM states, and the graph structure. HEFT is computationally the
-cheapest algorithm in this framework.
+\subsection{DP-HEFT}
 
-\textbf{Role:} HEFT establishes the baseline for schedule quality and execution
-speed. Its simplicity and proven effectiveness make it the reference point for
-evaluating more complex heuristics. Any improvement method must be justified
-against HEFT's speed-quality trade-off.
+DP-HEFT extends HEFT by replacing pure upward-rank ordering with
+bilateral rank ($\ranku + \rankd$), then applying a weighted 2-task
+look-ahead when selecting the VM for the current task.
 
-\subsection{DP-HEFT: Bilateral-Rank with 2-Task Look-Ahead}
+\subsection{EDP-HEFT}
 
-\textbf{Overview:} DP-HEFT improves upon greedy HEFT by combining
-bilateral-rank task prioritisation with a weighted 2-task look-ahead
-strategy. Instead of myopically assigning each task to the VM with
-minimum EFT, DP-HEFT also considers the impact on the next task's
-finish time, breaking ties and avoiding locally greedy decisions that
-harm global schedule quality.
+EDP-HEFT preserves bilateral-rank priority but evaluates VM decisions
+through a global DP table over task order and VM index. Backtracking
+produces a globally consistent assignment under the chosen priority
+order.
 
-\textbf{Algorithm flow:}
-\begin{enumerate}
-  \item Compute upward rank $\ranku(t)$ and downward rank $\rankd(t)$
-        for all tasks.
-  \item Derive bilateral rank: $\text{biRank}(t) = \ranku(t) + \rankd(t)$.
-  \item Sort tasks by descending bilateral rank.
-  \item For each task $t_i$:
-  \begin{enumerate}
-    \item Evaluate all VMs using both current and next-task costs.
-    \item Score each VM $v_k$ as:
-    $$\text{score}(v_k) = \EFT(t_i, v_k) + 0.25 \cdot \EFT^*(t_{i+1})$$
-    where $\EFT^*(t_{i+1})$ is the best EFT of the next task if $t_i$ is
-    assigned to $v_k$.
-    \item Assign $t_i$ to $v^* = \argmin_{v_k} \text{score}(v_k)$.
-  \end{enumerate}
-  \item Update VM availability and return the complete schedule.
-\end{enumerate}
+\subsection{Divide-and-Conquer (D\&C)}
+
+D\&C decomposes the DAG into topological BFS levels, schedules each
+level as an independent subproblem, and then merges local schedules
+while enforcing precedence and communication constraints globally.
+
+\subsection{Merge Algorithm (Hybrid OP)}
+
+The Merge algorithm (implemented in \texttt{merge.cpp}) is a hybrid
+strategy that integrates D\&C decomposition, DP look-ahead, and
+EDP-style global assignment in one adaptive pipeline.
+Its role is to improve schedule quality over local heuristics while
+retaining practical runtime on moderate DAG sizes.
 
 \begin{algorithm}[!t]
-\caption{DP-HEFT Scheduling (Bilateral-Rank + 2-Task Look-Ahead)}
-\label{alg:dpheft}
-\begin{algorithmic}[1]
-\STATE Compute $\ranku(t)$ and $\rankd(t)$ for all tasks $t \in \mathcal{T}$
-\STATE Compute $\text{biRank}(t) \leftarrow \ranku(t) + \rankd(t)$ for all $t$
-\STATE Sort tasks by descending $\text{biRank}$
-\FOR{each task $t_i$ in sorted order}
-    \STATE $\text{bestVM} \leftarrow 0$; $\text{bestScore} \leftarrow \infty$
-    \FOR{each VM $v_k$}
-        \STATE Compute $\EST(t_i, v_k)$ and $\EFT(t_i, v_k)$
-        \STATE Simulate $t_i \to v_k$ assignment (temporary state)
-        \STATE Compute $\EFT^*(t_{i+1})$ for next task under this assignment
-        \STATE $\text{score} \leftarrow \EFT(t_i, v_k) + 0.25 \cdot \EFT^*(t_{i+1})$
-        \IF{$\text{score} < \text{bestScore}$}
-            \STATE $\text{bestScore} \leftarrow \text{score}$; $\text{bestVM} \leftarrow v_k$
-        \ENDIF
-    \ENDFOR
-    \STATE Assign $t_i$ to $v_{\text{bestVM}}$; update VM availability
-\ENDFOR
-\STATE \textbf{return} complete schedule and makespan
-\end{algorithmic}
-\end{algorithm}
-
-\textbf{Complexity:} Time complexity is $O(n \log n + nm^2 + me)$ where the
-$nm^2$ term accounts for evaluating all task-VM pairs with one-step look-ahead.
-Space complexity remains $O(n + m + e)$ since only the current and next task
-states are retained. The look-ahead weighting (0.25) balances immediate and
-future task costs.
-
-\textbf{Role:} DP-HEFT serves as a practical middle ground between pure greedy
-methods and full global optimization, reducing myopic decisions while
-maintaining computational efficiency.
-
-\subsection{EDP-HEFT: Enhanced DP with Global Optimization}
-
-\textbf{Overview:} EDP-HEFT (Enhanced DP-HEFT) constructs a full $n \times m$
-DP table to achieve 
- globally optimal VM assignments under a fixed bilateral-rank priority order.
-Unlike DP-HEFT's local 2-task look-ahead, EDP-HEFT propagates complete
-scheduling snapshots through a DP state space, then backtracks to recover
-the globally best assignment sequence.
-
-\textbf{Algorithm flow:}
-\begin{enumerate}
-  \item Compute bilateral rank and sort tasks as in DP-HEFT.
-  \item Initialize DP table $\text{dp}[i][v]$ where $\text{dp}[i][v]$ stores
-        the best makespan when the $i$-th task is assigned to VM $v$.
-  \item \textbf{Base case:} For the first task, evaluate all VMs:
-  $$\text{dp}[0][v] \leftarrow \EFT(t_0, v) \quad \forall v$$
-  \item \textbf{Forward fill:} For each subsequent task $t_i$, for each pair
-        of VMs $(v_{\text{prev}}, v_\text{curr})$:
-  $$\text{dp}[i][v_\text{curr}] \leftarrow \min(\text{dp}[i][v_\text{curr}],
-  \max(\text{dp}[i-1][v_\text{prev}], \EFT(t_i, v_\text{curr})))$$
-  Store parent pointers and scheduling snapshots for backtracking.
-  \item \textbf{Backtracking:} Find the best final VM assignment and
-        reconstruct the full path by following parent pointers.
-  \item Replay the reconstructed assignments to compute the final schedule.
-\end{enumerate}
-
-\begin{algorithm}[!t]
-\caption{EDP-HEFT Scheduling (Enhanced DP with Backtracking)}
-\label{alg:edpheft}
-\begin{algorithmic}[1]
-\STATE Sort tasks by descending $\text{biRank}$
-\STATE Initialize $\text{dp}[0..n-1][0..m-1] \leftarrow \infty$
-\STATE Initialize $\text{parent}[0..n-1][0..m-1] \leftarrow -1$
-\FOR{each VM $v$}
-    \STATE $\text{dp}[0][v] \leftarrow \EFT(t_0, v)$
-\ENDFOR
-\FOR{$i \leftarrow 1$ to $n-1$}
-    \FOR{each previous VM $v_{\text{prev}}$}
-        \IF{$\text{dp}[i-1][v_{\text{prev}}] < \infty$}
-            \FOR{each current VM $v_\text{curr}$}
-                \STATE $\text{newMakespan} \leftarrow \max(\text{dp}[i-1][v_{\text{prev}}], \EFT(t_i, v_\text{curr}))$
-                \IF{$\text{newMakespan} < \text{dp}[i][v_\text{curr}]$}
-                    \STATE $\text{dp}[i][v_\text{curr}] \leftarrow \text{newMakespan}$
-                    \STATE $\text{parent}[i][v_\text{curr}] \leftarrow v_{\text{prev}}$
-                \ENDIF
-            \ENDFOR
-        \ENDIF
-    \ENDFOR
-\ENDFOR
-\STATE Backtrack from $\argmin_v \text{dp}[n-1][v]$ to reconstruct assignment
-\STATE Replay assignments to build final schedule
-\STATE \textbf{return} complete schedule and optimal makespan
-\end{algorithmic}
-\end{algorithm}
-
-\textbf{Complexity:} Time complexity is $O(nm^2 + me)$ since the DP fill stage
-iterates over all tasks and VM pairs, and space complexity is $O(nm(n+m))$
-because the algorithm stores a full DP table plus snapshots of scheduling
-states at each cell. This is the most expensive method in terms of memory
-and compute time.
-
-\textbf{Role:} EDP-HEFT provides a global optimization baseline under the
-chosen priority order. While it cannot escape the constraints of bilateral-rank
-ordering, it guarantees the best possible makespan subject to that order,
-making it valuable for understanding the quality ceiling of rank-based approaches.
-
-\subsection{Divide-and-Conquer (D\&C): Level-Based Decomposition}
-
-\textbf{Overview:} The D\&C scheduler exploits the DAG structure by decomposing
-it into independent topological levels (layers) via breadth-first search. Each
-level is scheduled as an independent subproblem using a simple greedy strategy,
-then partial schedules are merged while respecting cross-level dependencies and
-communication costs. This approach achieves the lowest asymptotic scheduling
-overhead among all methods.
-
-\textbf{Algorithm flow:}
-\begin{enumerate}
-  \item \textbf{DIVIDE:} Partition the DAG into levels using BFS on the
-        task dependency graph:
-  \begin{enumerate}
-    \item Compute indegree for each task.
-    \item Initialize queue with all entry tasks (indegree = 0).
-    \item Repeatedly pop all tasks from the queue as one level, then
-          decrement indegrees of successors and enqueue those with indegree 0.
-  \end{enumerate}
-  \item \textbf{CONQUER:} For each level independently:
-  \begin{enumerate}
-    \item Sort tasks by descending average execution time (heavy-first).
-    \item For each task, greedily assign to the VM with minimum EFT.
-  \end{enumerate}
-  \item \textbf{MERGE:} After all levels are scheduled:
-  \begin{enumerate}
-    \item Compute task start times respecting all cross-level dependencies.
-    \item Incorporate communication costs for inter-level data transfers.
-    \item Verify schedule feasibility and compute overall makespan.
-  \end{enumerate}
-\end{enumerate}
-
-\begin{algorithm}[!t]
-\caption{Divide-and-Conquer DAG Scheduling}
-\label{alg:dac}
-\begin{algorithmic}[1]
-\STATE \textbf{Phase 1: Decompose into levels via BFS}
-\STATE Compute $\text{indegree}[t]$ for all tasks $t$
-\STATE Initialize queue $Q$ with all entry tasks
-\STATE $\text{levels} \leftarrow \emptyset$
-\WHILE{$Q \neq \emptyset$}
-    \STATE $L \leftarrow$ all tasks in $Q$ (current level)
-    \STATE $\text{levels.append}(L)$
-    \STATE Clear $Q$
-    \FOR{each task $t$ in $L$}
-        \FOR{each successor $s$ of $t$}
-            \STATE $\text{indegree}[s] \leftarrow \text{indegree}[s] - 1$
-            \IF{$\text{indegree}[s] == 0$}
-                \STATE $Q.\text{push}(s)$
-            \ENDIF
-        \ENDFOR
-    \ENDFOR
-\ENDWHILE
-\STATE \textbf{Phase 2: Schedule each level greedily}
-\FOR{each level $L_i$ in $\text{levels}$}
-    \STATE Sort $L_i$ by descending average execution time
-    \FOR{each task $t$ in sorted $L_i$}
-        \STATE $\text{bestVM} \leftarrow \argmin_v \EFT(t, v)$ over all VMs
-        \STATE Assign $t$ to $\text{bestVM}$; update VM availability
-    \ENDFOR
-\ENDFOR
-\STATE \textbf{Phase 3: Merge and finalize}
-\STATE Recompute all EST/EFT values to enforce cross-level dependencies
-\STATE Add communication costs for inter-level data transfers
-\STATE \textbf{return} complete schedule and makespan
-\end{algorithmic}
-\end{algorithm}
-
-\textbf{Complexity:} Time complexity is $O(n \log n + nm + e)$ where the
-BFS decomposition is $O(n + e)$, level sorting is $O(n \log n)$, and greedy
-assignment is $O(nm)$. Space complexity is $O(n + m + e)$ for storing levels
-and the graph structure. D\&C is the computationally cheapest scheduler in
-this framework.
-
-\textbf{Trade-offs:} D\&C sacrifices global optimality for speed. By scheduling
-each level independently, it may make suboptimal cross-level decisions. However,
-for wide, shallow DAGs (many tasks per level), this approach is highly
-competitive. The merge phase ensures all dependencies are respected, though
-it cannot undo prior level-local choices.
-
-\textbf{Role:} D\&C provides a fast baseline for very large DAGs where even
-polynomial DP tables become prohibitively expensive. It is particularly effective
-on DAGs with high parallelism and moderate depth, making it valuable for
-cloud environments with many heterogeneous VMs.
-
-\subsection{Merge Algorithm (Hybrid Adaptive Scheduler)}
-
-\textbf{Overview:} The Merge algorithm is a novel hybrid scheduler that
-adaptively combines three scheduling strategies—D\&C level decomposition, DP
-look-ahead (DP-HEFT), and global DP optimization (EDP-HEFT)—in a single unified
-pipeline. Rather than committing to one heuristic, Merge classifies each
-topological level based on structural properties (width, density, criticality)
-and selects the most appropriate strategy. After constructing an initial
-schedule, it applies iterative refinement phases (task migration, VM swaps,
-critical-path optimization) to improve schedule quality further. Merge
-represents the highest computational cost but aims for the best achievable
-makespan.
-
-\textbf{Algorithm flow:}
-\begin{enumerate}
-  \item \textbf{Rank and Profile Computation:}
-  \begin{enumerate}
-    \item Compute upward rank $\ranku(t)$ and downward rank $\rankd(t)$ for all tasks.
-    \item Derive bilateral rank: $\text{biRank}(t) = \ranku(t) + \rankd(t)$.
-    \item Build topological levels via BFS (same as D\&C).
-    \item Analyze DAG profile: level width (max parallelism), density
-          (edge ratio), and criticality (critical-path length).
-  \end{enumerate}
-  \item \textbf{Adaptive Level Scheduling:}
-  \begin{enumerate}
-    \item For each topological level $L_i$, compute structural metrics.
-    \item Classify $L_i$ as: \textbf{Wide} (high parallelism) $\rightarrow$
-          use D\&C greedy; \textbf{Dense} (many edges) $\rightarrow$ use DP
-          look-ahead; \textbf{Critical} (on longest path) $\rightarrow$ use
-          global EDP.
-    \item Schedule tasks in $L_i$ using the selected strategy.
-    \item Preserve cross-level dependencies and communication costs.
-  \end{enumerate}
-  \item \textbf{Global Optimization (Alternative Path):}
-  \begin{enumerate}
-    \item In parallel, construct an alternate schedule using global EDP-HEFT
-          over all tasks at once.
-    \item Compare initial level-based schedule with global EDP schedule.
-    \item Select the schedule with lower makespan as the starting point.
-  \end{enumerate}
-  \item \textbf{Iterative Refinement (5 phases):}
-  \begin{enumerate}
-    \item \textbf{Phase 1 - Bottleneck Migration:} Identify VMs with longest
-          finish times; attempt to migrate their heaviest tasks to underutilized
-          VMs.
-    \item \textbf{Phase 2 - Aggressive Migration:} Explore moving any task to
-          any VM if makespan improves.
-    \item \textbf{Phase 3 - Task Swaps:} Attempt pairwise swaps of tasks between
-          VMs to reduce total completion time.
-    \item \textbf{Phase 4 - Global DP Replay:} Rebuild a full EDP assignment
-          on the current partial schedule and apply resulting changes.
-    \item \textbf{Phase 5 - Critical Path Re-optimization:} Focus refinement on
-          tasks on the critical path (longest dependency chain).
-  \end{enumerate}
-  \item Return the best refined schedule and its makespan.
-\end{enumerate}
-
-\begin{algorithm}[!t]
-\caption{Merge Hybrid Scheduling (Adaptive Multi-Strategy)}
+\caption{Merge Hybrid Scheduling}
 \label{alg:merge}
 \begin{algorithmic}[1]
-\STATE \textbf{Step 1: Compute profiles}
-\STATE Compute $\ranku(t)$, $\rankd(t)$, $\text{biRank}(t)$ for all tasks
-\STATE Build topological levels $L_0, L_1, \ldots, L_d$ via BFS
-\STATE Analyze DAG profile: width, density, criticality metrics
-\STATE \textbf{Step 2: Adaptive level scheduling}
-\STATE $\text{schedule} \leftarrow \emptyset$; $\text{makespan} \leftarrow 0$
+\STATE Compute upward and downward ranks; derive bilateral rank
+\STATE Build topological levels and graph profile (width, density, criticality)
 \FOR{each level $L_i$}
-    \STATE Compute width, density, and criticality of $L_i$
-    \IF{width is high}
-        \STATE Use D\&C greedy strategy on $L_i$
-    \ELSIF{density is high}
-        \STATE Use DP look-ahead strategy on $L_i$
-    \ELSE
-        \STATE Use EDP global strategy on $L_i$
-    \ENDIF
-    \STATE Schedule tasks in $L_i$; add to $\text{schedule}$
+    \STATE Classify strategy for $L_i$: D\&C / DP look-ahead / EDP-global
+    \STATE Schedule tasks in $L_i$ using selected strategy
 \ENDFOR
-\STATE \textbf{Step 3: Global alternative}
-\STATE $\text{schedule\\_global} \leftarrow$ EDP-HEFT over all tasks
-\STATE Compare; $\text{schedule} \leftarrow$ better of the two by makespan
-\STATE \textbf{Step 4-8: Refinement iterations}
-\FOR{refinement phase $p = 1$ to $5$}
-    \STATE Apply phase $p$ improvements (migration, swaps, DP replay, critical-path focus)
-    \STATE If makespan improves, retain changes; else revert
-\ENDFOR
-\STATE \textbf{return} best schedule and final makespan
+\STATE Build alternate global EDP assignment for all tasks
+\STATE Select better initial schedule by makespan
+\STATE Run refinement passes (migration, swaps, and critical-task re-optimisation)
+\STATE \textbf{return} best refined schedule
 \end{algorithmic}
 \end{algorithm}
-
-\textbf{Complexity:} Time complexity is $O(nm^2 + nm(n+e) + n^2(n+e))$ where
-the $nm^2$ term covers DP look-ahead per level, the $nm(n+e)$ term represents
-global EDP construction, and the $n^2(n+e)$ term reflects iterative refinement
-phases. Space complexity is $O(nm(n+m))$ due to maintaining DP tables and
-multiple schedule snapshots. Merge is the most computationally expensive
-scheduler, making it practical only for small-to-moderate DAGs (${\sim} 100$
-tasks) or where offline computation is acceptable.
-
-\textbf{Refinement Details:} The five refinement phases employ heuristic
-assignments (not global optimization per phase) to iteratively improve the
-current schedule. Bottleneck migration targets VMs with high finish times,
-aggressive migration explores all task-VM moves, task swaps explore pairwise
-exchanges, global DP replay re-solves the full DP problem to recover good
-assignments, and critical-path focus concentrates improvements on longest-path
-tasks where they have maximum impact on makespan.
-
-\textbf{Role:} Merge serves as the best-effort optimizer, targeting the lowest
-achievable makespan by combining multiple strategies adaptively. It is intended
-for offline scheduling scenarios in cloud systems where precomputed solutions
-are cached and reused, or for small DAGs where 100-1000ms overhead is acceptable.
 
 % ============================================================
 %  VI. MATHEMATICAL MODEL NOTE
