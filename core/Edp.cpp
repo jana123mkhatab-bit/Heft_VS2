@@ -21,6 +21,7 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -206,6 +207,8 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 
 AlgorithmResult edp_heft(const DAGData& dag)
 {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
     int n = static_cast<int>(dag.tasks.size());
     int m = static_cast<int>(dag.vms.size());
 
@@ -250,12 +253,16 @@ AlgorithmResult edp_heft(const DAGData& dag)
         vmReady[vm]    = eft;
     }
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+    double runtimeMs = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+
     // Build AlgorithmResult
     AlgorithmResult result;
     result.algorithmName = "EDP-HEFT";
     result.algorithmDesc = "Bilateral rank + Full Global DP VM Selection  |  O(n * m^2)";
     result.isValid       = true;
     result.makespan      = *max_element(vmReady.begin(), vmReady.end());
+    result.runtimeMs     = runtimeMs;
 
     for (const auto& kv : scheduled)
         result.entries.push_back(kv.second);
