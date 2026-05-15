@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include "merge.h"
 #include "dag_generator.h"
 #include "AlgorithmResult.h"
@@ -17,12 +18,10 @@
 
 using namespace std;
 
+// Part: Constants
 static constexpr double merge_INF = numeric_limits<double>::max() / 2.0;
 
-
-
-
-
+// Part: Helpers
 static double merge_avgExec(const DAGData& dag, int taskId)
 {
     const auto& et = dag.tasks[taskId].execTimes;
@@ -107,6 +106,7 @@ static vector<vector<int>> merge_computeLevels(const DAGData& dag)
     return levels;
 }
 
+// Part: Types
 struct DAGProfile {
     int    numLevels;
     double avgLevelWidth;
@@ -159,8 +159,7 @@ static DAGProfile analyzeDAG(const DAGData& dag,
 
 
 
-
-
+// Part: Types
 struct ScheduleState {
     vector<double>          vmReady;
     vector<double>          taskFinish;  
@@ -191,6 +190,7 @@ static void commitTask(ScheduleState& st, int taskId, int vmId,
 }
 
 
+// Part: Level Schedulers
 static void scheduleLevel_DaC(const DAGData& dag, const vector<int>& tasks,
                               ScheduleState& st)
 {
@@ -433,6 +433,7 @@ static void scheduleLevel_EDP(const DAGData& dag, const vector<int>& tasks,
 
 
 
+// Part: Level Strategy
 enum class LevelStrategy { DAC, HEFT, GREEDY_MINMIN, DP_LOOKAHEAD, EDP_GLOBAL };
 
 static LevelStrategy classifyLevel(const DAGData& dag,
@@ -493,6 +494,7 @@ static LevelStrategy classifyLevel(const DAGData& dag,
 
 
 
+// Part: Helpers
 static double computeMakespan(const ScheduleState& st, int n)
 {
     double ms = 0.0;
@@ -505,6 +507,7 @@ static double computeMakespan(const ScheduleState& st, int n)
 
 
 
+// Part: Public API Implementations
 AlgorithmResult merge_schedule(const DAGData& dag)
 {
     auto t0 = chrono::high_resolution_clock::now();

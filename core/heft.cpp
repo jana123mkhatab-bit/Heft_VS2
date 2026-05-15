@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include "heft.h"
 #include "dag_generator.h"
 #include "AlgorithmResult.h"
@@ -14,7 +15,7 @@
 
 static constexpr double HEFT_INF = std::numeric_limits<double>::max();
 
-
+// Part: Helpers
 static double avgExecTime(const DAGData& dag, int taskId)
 {
 	double sum = 0.0;
@@ -74,6 +75,8 @@ static double computeEFT(const DAGData& dag,
 
 
 
+
+// Part: Public API Implementations
 AlgorithmResult heft_schedule(const DAGData& dag)
 {
 	auto startTime = std::chrono::high_resolution_clock::now();

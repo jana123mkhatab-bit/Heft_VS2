@@ -1,3 +1,4 @@
+// Part: Includes
 #include "dac.h"
 
 #include <queue>
@@ -8,6 +9,7 @@
 
 using namespace std;
 
+// Part: Helpers
 static double dac_commCost(const DAGData& dag,
                            int predTask,
                            int predVm,
@@ -23,6 +25,7 @@ static double dac_commCost(const DAGData& dag,
     return dag.commCostFactor * avg;
 }
 
+// Part: Public API Implementations
 AlgorithmResult dac_schedule(const DAGData& dag) {
 
     auto startTimeMs = std::chrono::high_resolution_clock::now();

@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include <iostream>
 #include <string>
 #include <iomanip>
@@ -14,6 +15,8 @@
 #include "core/dac.h"
 #include "core/merge.h"
 using namespace std;
+
+// Part: Helpers
 static void printBanner(const std::string& title)
 {
     const std::string border(60, '=');
@@ -21,6 +24,8 @@ static void printBanner(const std::string& title)
     std::cout << "  " << title << "\n";
     std::cout << border << "\n";
 }
+
+// Part: Entry Point
 int main()
 {
     
@@ -149,6 +154,8 @@ int main()
     
     printBanner("ALGORITHM COMPARISON – PERFORMANCE RESULTS");
 
+    // Part: Comparison Table
+
     const std::string tableBorder(100, '=');
     const std::string rowSeparator(100, '-');
 
@@ -192,6 +199,7 @@ int main()
 
     std::cout << rowSeparator << "\n";
 
+    // Part: Summary
     
     double bestMakespan = results[0].makespan;
     double worstMakespan = results[results.size() - 1].makespan;

@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include "dag_generator.h"
 
 #include <iostream>   
@@ -11,10 +12,7 @@
 #include <limits>     
 
 
-
-
-
- 
+// Part: Helpers
 static std::mt19937 makeRandomEngine()
 {
     
@@ -83,7 +81,6 @@ static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
         }
     }
 
-    
     if (totalEdges == 0) {
         int src = 0;
         int dst = numTasks - 1;
@@ -96,6 +93,8 @@ static void generateEdges(std::vector<Task>& tasks, std::mt19937& gen)
 
 
 
+
+// Part: Public API Implementations
 DAGData generateDAG(int numTasks, int numVMs)
 {
     
@@ -123,10 +122,7 @@ DAGData generateDAG(int numTasks, int numVMs)
 
 
 
-
-double calculateCommCostFactor(const DAGData& dag)
-{
-    const int numTasks = static_cast<int>(dag.tasks.size());
+// Part: Helpers
     const int numVMs   = static_cast<int>(dag.vms.size());
     
     if (numTasks < 2 || numVMs < 1) return 0.3; 
@@ -399,6 +395,7 @@ static std::string formatIntList(const std::vector<int>& v)
     return out;
 }
 
+// Part: Public API Implementations
 void printDAG(const DAGData& dag)
 {
     const std::string line(60, '-');

@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include "Edp.h"
 #include "dag_generator.h"
 #include "AlgorithmResult.h"
@@ -17,12 +18,9 @@
 
 using namespace std;
 
+// Part: Constants
 static constexpr double EDP_INF = numeric_limits<double>::max() / 2.0;
-
-
-
-
-
+// Part: Helpers
 static double edp_avgExec(const DAGData& dag, int taskId)
 {
     const vector<double>& et = dag.tasks[taskId].execTimes;
@@ -85,6 +83,7 @@ static vector<double> edp_downwardRank(const DAGData& dag)
 
 
 
+// Part: Types
 struct EDPSnapshot {
     vector<double> vmReady;
     vector<double> taskFinish;
@@ -112,6 +111,7 @@ static double edp_computeEFT(const DAGData& dag,
 
 
 
+// Part: Helpers
 static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 {
     int n = static_cast<int>(priority.size());
@@ -231,8 +231,7 @@ static vector<int> edp_runDP(const DAGData& dag, const vector<int>& priority)
 }
 
 
-
-
+// Part: Public API Implementations
 AlgorithmResult edp_heft(const DAGData& dag)
 {
     auto startTime = std::chrono::high_resolution_clock::now();

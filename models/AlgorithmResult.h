@@ -2,14 +2,13 @@
 
 #pragma once
 
+// Part: Includes
 #include <vector>
 #include <string>
 
 
 
-
-
-
+// Part: Types
 struct ScheduleEntry {
     int    taskId    = -1;   
     int    vmId      = -1;   
@@ -19,9 +18,7 @@ struct ScheduleEntry {
 
 
 
-
-
-
+// Part: Types
 struct AlgorithmResult {
     std::string              algorithmName; 
     std::string              algorithmDesc; 
@@ -31,7 +28,5 @@ struct AlgorithmResult {
     bool   isValid    = false;             
 };
 
- 
-
-
+// Part: Public API
 void printAlgorithmResult(const AlgorithmResult& result);

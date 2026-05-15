@@ -2,9 +2,10 @@
 
 #pragma once
 
+// Part: Includes
 #include "dag_generator.h"    
 #include "AlgorithmResult.h"  
 
 
-
+// Part: Public API
 AlgorithmResult edp_heft(const DAGData& dag);

@@ -1,5 +1,6 @@
  
 
+// Part: Includes
 #include "dp.h"
 #include "dag_generator.h"
 
@@ -21,7 +22,7 @@ static constexpr double INF = numeric_limits<double>::max();
 
 
 
- 
+// Part: Helpers
 static double commCost(const DAGData& dag, int predTask, int predVm,
                        int  , int succVm)
 {
@@ -118,6 +119,8 @@ static vector<double> computeDownwardRank(const DAGData& dag)
 
 
 
+
+// Part: Public API Implementations
 AlgorithmResult dp_heft(const DAGData& dag)
 {
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -216,6 +219,8 @@ AlgorithmResult dp_heft(const DAGData& dag)
 
 
 
+
+// Part: Public API Implementations
 void printAlgorithmResult(const AlgorithmResult& result)
 {
     const std::string border(60, '=');
