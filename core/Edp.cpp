@@ -48,8 +48,7 @@ static double edp_commCost(const DAGData& dag,
                             int /*succTask*/, int succVm)
 {
     if (predVm == succVm) return 0.0;
-    constexpr double COMM_FACTOR = 0.3;
-    return COMM_FACTOR * edp_avgExec(dag, predTask);
+    return dag.commCostFactor * edp_avgExec(dag, predTask);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
